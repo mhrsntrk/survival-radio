@@ -39,7 +39,7 @@ F again>Cancel
 M tap steps groups
 PMR446 EU, 16 ch
 FRS US/CA, 22 ch
-MARINE VHF + WX
+MARINE VHF
 AIR 118-137 AM
 HAM 2m/70cm calls
 CB 40 ch, 27 MHz
@@ -137,9 +137,10 @@ Sends only where
 == SENDING
 PTT sends FM only
   on allowed bands
-PMR, FRS: on
-MARINE, HAM, CB:
-  Adv>TxMAR/HAM/CB
+PMR446: on
+FRS, MAR, HAM, CB:
+  Adv>TxFRS/MAR/
+  TxHAM/TxCB
 TxAll>Any other
 Always blocked:
   88-137, 225-400,

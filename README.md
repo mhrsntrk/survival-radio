@@ -20,8 +20,7 @@ Based on [F4HWN](https://github.com/armel/uv-k5-firmware-custom) (fork of
 
 ## What it does
 
-- **Channel groups, ready to use:** PMR446 (16), FRS (22), MARINE (VHF with coast-station duplex and
-  NOAA weather), AIR (the whole 118-137 MHz air band, AM), HAM calling channels, CB (40) and your own
+- **Channel groups, ready to use:** PMR446 (16), FRS (22), MARINE (VHF with coast-station duplex), AIR (the whole 118-137 MHz air band, AM), HAM calling channels, CB (40) and your own
   FAV list. `M` steps through them.
 - **Fast scan** that stops on a signal. A short RSSI pre-check skips empty steps in ~20 ms.
 - **Skip list:** a noisy channel stops the scan? `F+8` and the scan never stops there again.
