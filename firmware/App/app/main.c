@@ -88,6 +88,14 @@ static void toggle_chan_scanlist(void)
     gFlagResetVfos    = true;
 }
 
+#ifdef ENABLE_SURVIVAL
+// the F + digit shortcuts of the survival help page (F+UP/DOWN is the squelch)
+static bool SurvivalFKey(KEY_Code_t Key)
+{
+    return Key <= KEY_9;   // KEY_0 = 0 .. KEY_9 = 9
+}
+#endif
+
 static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
 {
 #ifndef ENABLE_SURVIVAL
@@ -114,8 +122,7 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
 
 #ifdef ENABLE_SURVIVAL
     // only the shortcuts on the help page; the other F functions are upstream VFO tools
-    if (Key != KEY_0 && Key != KEY_1 && Key != KEY_2 && Key != KEY_3 && Key != KEY_4 && Key != KEY_5 &&
-        Key != KEY_6 && Key != KEY_7 && Key != KEY_8 && Key != KEY_9 && Key != KEY_UP && Key != KEY_DOWN) {
+    if (!SurvivalFKey(Key) && Key != KEY_UP && Key != KEY_DOWN) {
         if (beep)
             gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
         return;
@@ -643,7 +650,7 @@ static void MAIN_Key_DIGITS(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
     }
 
 #ifdef ENABLE_SURVIVAL
-    if (Key != KEY_0 && Key != KEY_4 && Key != KEY_5 && Key != KEY_6 && Key != KEY_7 && Key != KEY_8) {   // not on the help page: the page stays
+    if (!SurvivalFKey(Key)) {   // not on the help page: the page stays
         gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
         return;
     }
