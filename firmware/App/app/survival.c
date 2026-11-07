@@ -190,7 +190,15 @@ static const TxBand_t TX_BLOCKED[] = {
     {22500000, 40000000, 0},   // military aviation (243.0 guard)
     {40600000, 40610000, 0},   // COSPAS-SARSAT distress beacons
     {15651250, 15653750, 0},   // marine channel 70: DSC data only, no voice
+    {15676250, 15683750, 0},   // marine channels 75/76: guard band around channel 16
+    {16196250, 16203750, 0},   // AIS 1 and 2 (161.975 / 162.025 MHz)
+    {121500000, 130000000, 0}, // GNSS L2 / E6 (GPS, Galileo)
 };
+
+#define PMR_LOWER 44600000     // PMR446 band edges: power cap and narrow FM under SAFE LIMITS
+#define PMR_UPPER 44620000
+#define CB_LOWER   2656500     // 27 MHz: harmonics land in the air and marine bands
+#define CB_UPPER   2800000
 
 typedef struct {
     const char     *prefix;  // name = prefix + channel number
@@ -545,7 +553,7 @@ static void WriteDefaults(void)
     gEeprom.CROSS_BAND_RX_TX         = CROSS_BAND_OFF;
     gSetting_set_inv                 = false;   // normal (not negative) display
     gSetting_set_ctr                 = 10;      // F4HWN default contrast, blank EEPROM reads as 15
-    gSetting_set_lck                 = false;   // key lock locks keys only, not PTT
+    gSetting_set_lck                 = true;    // key lock locks PTT too: no pocket calls
 
     gEeprom.TX_VFO = 0;
     for (uint8_t vfo = 0; vfo < 2; vfo++) {
@@ -667,6 +675,9 @@ bool SURVIVAL_TxAllowed(uint32_t frequency)
         if (frequency >= TX_BLOCKED[i].lower && frequency < TX_BLOCKED[i].upper)
             return false;
     }
+    // SAFE LIMITS: CB is listen only (the VHF filter does not stop its harmonics)
+    if (!(gSurvivalFlags & SURV_F_NO_LIMITS) && frequency >= CB_LOWER && frequency < CB_UPPER)
+        return false;
     if ((gSurvivalTxMask >> SURV_TX_ALL) & 1u)
         return true;
 
@@ -677,6 +688,12 @@ bool SURVIVAL_TxAllowed(uint32_t frequency)
             return true;
     }
     return false;
+}
+
+// SAFE LIMITS: PMR446 is sent at LOW3 (about 0.25 W) and narrow, whatever the channel says
+bool SURVIVAL_TxCapped(uint32_t frequency)
+{
+    return !(gSurvivalFlags & SURV_F_NO_LIMITS) && frequency >= PMR_LOWER && frequency < PMR_UPPER;
 }
 
 // factory reset: both records go, the next start sets everything up again

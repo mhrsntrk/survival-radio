@@ -141,6 +141,10 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
         case MENU_SRV_COUNTRY:
             *pMax = SURVIVAL_CountryCount() - 1;
             break;
+
+        case MENU_SRV_LIMITS:
+            *pMax = 1;
+            break;
 #endif
 
         case MENU_SQL:
@@ -499,12 +503,10 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
             *pMax = ARRAY_SIZE(gSubMenu_OFF_ON) - 1;
             break;
 #endif
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_SET_LCK:
             //*pMin = 0;
             *pMax = ARRAY_SIZE(gSubMenu_SET_LCK) - 1;
             break;
-#endif
         case MENU_SET_MET:
         case MENU_SET_GUI:
             //*pMin = 0;
@@ -578,6 +580,11 @@ void MENU_AcceptSetting(void)
 
         case MENU_SRV_COUNTRY:
             SURVIVAL_SetCountry(gSubMenuSelection);
+            return;
+
+        case MENU_SRV_LIMITS:
+            gSurvivalFlags = gSubMenuSelection ? (gSurvivalFlags & ~SURV_F_NO_LIMITS) : (gSurvivalFlags | SURV_F_NO_LIMITS);
+            SURVIVAL_SaveSettings();
             return;
 
         case MENU_SRV_C_START:
@@ -1142,11 +1149,9 @@ void MENU_AcceptSetting(void)
             gSetting_set_inv = gSubMenuSelection;
             break;
 #endif
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_SET_LCK:
             gSetting_set_lck = gSubMenuSelection;
             break;
-#endif
 #ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_SET_MET:
             gSetting_set_met = gSubMenuSelection;
@@ -1223,6 +1228,10 @@ void MENU_ShowCurrentSetting(void)
 
         case MENU_SRV_COUNTRY:
             gSubMenuSelection = gSurvivalCountry;
+            break;
+
+        case MENU_SRV_LIMITS:
+            gSubMenuSelection = !(gSurvivalFlags & SURV_F_NO_LIMITS);
             break;
 
         case MENU_SRV_TX_PMR ... MENU_SRV_TX_ALL:
@@ -1717,11 +1726,9 @@ void MENU_ShowCurrentSetting(void)
             gSubMenuSelection = gSetting_set_inv;
             break;
 #endif
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_SET_LCK:
             gSubMenuSelection = gSetting_set_lck;
             break;
-#endif
 #ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_SET_MET:
             gSubMenuSelection = gSetting_set_met;

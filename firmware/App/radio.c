@@ -956,6 +956,11 @@ void RADIO_SetTxParameters(void)
 
     BK4819_ToggleGpioOut(BK4819_GPIO0_PIN28_RX_ENABLE, false);
 
+#ifdef ENABLE_SURVIVAL
+    if (Bandwidth == BK4819_FILTER_BW_WIDE && SURVIVAL_TxCapped(gCurrentVfo->pTX->Frequency))
+        Bandwidth = BK4819_FILTER_BW_NARROW;   // SAFE LIMITS: PMR446 is 12.5 kHz
+#endif
+
     switch (Bandwidth)
     {
         default:
@@ -988,7 +993,22 @@ void RADIO_SetTxParameters(void)
 
     SYSTEM_DelayMs(5);
 
+#ifdef ENABLE_SURVIVAL
+    uint8_t txp = gCurrentVfo->TXP_CalculatedSetting;
+    if (SURVIVAL_TxCapped(gCurrentVfo->pTX->Frequency) &&
+        (gCurrentVfo->OUTPUT_POWER == OUTPUT_POWER_USER || gCurrentVfo->OUTPUT_POWER > OUTPUT_POWER_LOW3))
+    {   // SAFE LIMITS: the PA setting of LOW3 for this transmission only
+        const uint8_t power = gCurrentVfo->OUTPUT_POWER;
+        gCurrentVfo->OUTPUT_POWER = OUTPUT_POWER_LOW3;
+        RADIO_ConfigureSquelchAndOutputPower(gCurrentVfo);
+        txp = gCurrentVfo->TXP_CalculatedSetting;
+        gCurrentVfo->OUTPUT_POWER = power;
+        RADIO_ConfigureSquelchAndOutputPower(gCurrentVfo);
+    }
+    BK4819_SetupPowerAmplifier(txp, gCurrentVfo->pTX->Frequency);
+#else
     BK4819_SetupPowerAmplifier(gCurrentVfo->TXP_CalculatedSetting, gCurrentVfo->pTX->Frequency);
+#endif
 
     SYSTEM_DelayMs(10);
 

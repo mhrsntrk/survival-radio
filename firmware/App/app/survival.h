@@ -64,6 +64,7 @@ uint8_t SURVIVAL_FindNextChannel(uint8_t Channel, int8_t Direction, bool bCheckS
 uint8_t SURVIVAL_GetMode(void);
 void    SURVIVAL_SetMode(uint8_t mode);
 bool    SURVIVAL_TxAllowed(uint32_t frequency);
+bool    SURVIVAL_TxCapped(uint32_t frequency);   // SAFE LIMITS: low power, narrow
 void    ACTION_SurvivalGroup(void);
 void    SURVIVAL_ToggleFm(void);
 

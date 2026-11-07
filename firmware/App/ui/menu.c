@@ -59,6 +59,7 @@ const t_menu_item MenuList[] =
     {"Prio",        MENU_SRV_PRIO,       "PRIORITY"   },
     {"Quiet",       MENU_SQL,            "SQUELCH"    },
     {"Power",       MENU_TXP,            "TX POWER"   },
+    {"Limits",      MENU_SRV_LIMITS,     "SAFE LIMITS"},
     {"Eco",         MENU_SRV_ECO,        "SAVE POWER" },
     {"Radio",       MENU_SRV_RADIO,      "FM RADIO"   },
     {"Help",        MENU_SRV_HELP,       "MANUAL"     },
@@ -84,6 +85,7 @@ const t_menu_item MenuList[] =
     {"TxAll",       MENU_SRV_TX_ALL,     "WIDE TX"    },
     {"Rename",      MENU_MEM_NAME,       "CH NAME"    },
     {"Lock",        MENU_AUTOLK,         "AUTO LOCK"  },
+    {"LockTx",      MENU_SET_LCK,        "LOCK ALSO"  },
     {"TxTime",      MENU_TOT,            "TX LIMIT"   },
     {"Mic",         MENU_MIC,            "MIC GAIN"   },
     {"Light",       MENU_ABR,            "BACKLIGHT"  },
@@ -737,6 +739,10 @@ void UI_DisplayMenu(void)
             strcpy(String, SURVIVAL_CountryName(gSubMenuSelection));
             break;
 
+        case MENU_SRV_LIMITS:
+            strcpy(String, gSubMenuSelection ? "ON\nCAPPED" : "OFF\nEMERGENCY");
+            break;
+
         case MENU_SRV_HEARD:
         case MENU_SRV_SKIP:
         case MENU_SRV_HELP:
@@ -1354,11 +1360,9 @@ void UI_DisplayMenu(void)
             break;
 #endif
 
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_SET_LCK:
             strcpy(String, gSubMenu_SET_LCK[gSubMenuSelection]);
             break;
-#endif
 
         case MENU_SET_MET:
         case MENU_SET_GUI:
