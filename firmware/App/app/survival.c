@@ -854,8 +854,8 @@ void ACTION_SurvivalGroup(void)
     uint8_t mode = SURVIVAL_GetMode();
     for (uint8_t n = 0; n < SURV_MODE_COUNT; n++) {
         mode = (mode + 1) % SURV_MODE_COUNT;
-        if (mode < ARRAY_SIZE(GROUPS) && GroupCount(mode) == 0)   // skip empty groups
-            continue;
+        if (mode < ARRAY_SIZE(GROUPS) && mode != SURV_MODE_AIR && GroupCount(mode) == 0)
+            continue;   // skip empty groups (AIR is a band, it has no channels)
         if ((gSurvivalFlags & SURV_F_SIMPLE) && mode != SURV_MODE_PMR && mode != SURV_MODE_FRS &&
             mode != SURV_MODE_FM && mode != SURV_MODE_FAV)
             continue;   // simple mode: the few groups that matter
