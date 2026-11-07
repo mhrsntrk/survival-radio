@@ -1,4 +1,4 @@
-# UI redesign brief — BMKs Survival Radio (UV-K5, 128x64 mono LCD)
+# UI redesign brief — Survival Radio (UV-K5, 128x64 mono LCD)
 
 Goal (from the owner): one clear, simple interface and menu system for the survival firmware.
 It must cover every screen, settings should be simplified where possible, everything easy to read

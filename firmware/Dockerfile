@@ -1,24 +1,38 @@
-# syntax=docker/dockerfile:1.6
+FROM mcr.microsoft.com/devcontainers/python:3.10-bookworm
 
-# Parametric Alpine tag. Override at build time with:
-#   docker build --build-arg ALPINE_TAG=3.21 -t uvk5 .
-# Examples: 3.22, 3.21, 3.19, edge
-ARG ALPINE_TAG=3.21
-FROM alpine:${ALPINE_TAG}
+# ---------------------------------------------
+# Base build tools
+# ---------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build python3 curl xz-utils ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# Toolchain and utilities needed to build the firmware
-RUN apk add --no-cache \
-      bash \
-      build-base \
-      gcc-arm-none-eabi \
-      newlib-arm-none-eabi \
-      python3 \
-      py3-crcmod \
-      py3-pip \
-      git
+# ---------------------------------------------
+# Install ARM GNU Toolchain (host autodetect)
+# Works with or without TARGETARCH/BuildKit
+# ---------------------------------------------
+ARG ARM_GCC_VERSION=13.3.rel1
+ARG TARGETARCH  # may be unset under legacy builder
 
-# Project workspace
-WORKDIR /app
+RUN set -e; \
+    # Derive base arch: prefer TARGETARCH if provided, fallback to uname -m
+    BASE_ARCH="${TARGETARCH:-}"; \
+    if [ -z "$BASE_ARCH" ]; then BASE_ARCH="$(uname -m)"; fi; \
+    case "$BASE_ARCH" in \
+      amd64|x86_64)  HOSTARCH="x86_64" ;; \
+      arm64|aarch64) HOSTARCH="aarch64" ;; \
+      *)             HOSTARCH="x86_64" ;; \
+    esac; \
+    TARBALL="arm-gnu-toolchain-${ARM_GCC_VERSION}-${HOSTARCH}-arm-none-eabi.tar.xz"; \
+    URL="https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu/${ARM_GCC_VERSION}/binrel/${TARBALL}"; \
+    echo "Downloading ${URL}"; \
+    curl -fL -O "${URL}"; \
+    tar -xf "${TARBALL}"; \
+    rm "${TARBALL}"; \
+    DIR="$(ls -d arm-gnu-toolchain-${ARM_GCC_VERSION}-*-arm-none-eabi)"; \
+    mv "${DIR}" /opt/toolchain
 
-# Copy sources into the image (the script mounts the repo and runs builds)
-COPY . .
+# Toolchain in PATH
+ENV PATH="/opt/toolchain/bin:${PATH}"
+
+WORKDIR /src

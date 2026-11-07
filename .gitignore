@@ -4,14 +4,12 @@ toolchain/
 .venv/
 __pycache__/
 
-# build outputs: keep only the current Survival release
+# build outputs: keep only the current release
 builds/*
-!builds/bmks.survival.bin
-!builds/bmks.survival.packed.bin
-!builds/bmks.survival.v3.bin
+!builds/survival-radio.bin
 
-# V3 CMake build directory
-firmware-v3/build/
+# CMake build directory
+firmware/build/
 
 # screen capture frames (the sheets and single shots are kept)
 design/screens/seq/

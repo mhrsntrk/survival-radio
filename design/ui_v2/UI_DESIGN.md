@@ -1,4 +1,4 @@
-# BMKs Survival Radio — UI v2 proposal
+# Survival Radio — UI v2 proposal
 
 Design only; no firmware changes. Source baseline: current `README.md` through v4.1, `firmware/app/survival.c`, `firmware/ui/{main,menu,fmradio,helper}.c`, and `firmware/font.c`. The captures in `design/screens/` were checked against the code: some named captures contain a different screen or an empty frame, so their filenames are not authoritative. Flash numbers below are estimates, not build measurements.
 

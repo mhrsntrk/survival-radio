@@ -1,4 +1,4 @@
-# BMKs Survival Radio manual (F+6 on the radio)
+# Survival Radio manual (F+6 on the radio)
 # Built into the firmware by tools/manual2c.py -> firmware/app/survival_manual.c
 # "== TITLE" starts a topic (title max 12 chars), every other line is one screen row (max 18 chars).
 # The first two topics are also pages 2 and 3 of the F key help. Lines starting with '#' are comments.
