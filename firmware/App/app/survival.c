@@ -77,6 +77,7 @@ uint8_t  gSurvivalFlags       = 0;
 static bool sFmBgScan;       // BK4819 scans a group while the FM radio plays
 static bool sStopOnRxEnd;    // a background hit ends the scan when that transmission ends
 static bool sScanBeforeFm;   // a scan was running when FM was switched on
+static uint8_t sChBeforeFm = 0xFF;   // channel the user was on before the FM background scan moved it
 uint32_t gSurvivalCustomStart = SURV_RANGE_START;
 uint32_t gSurvivalCustomEnd   = SURV_RANGE_END;
 uint8_t  gSurvivalPrio        = 0xFF;
@@ -849,6 +850,7 @@ void SURVIVAL_FmStarted(void)
         // the mode used before FM: its group or FAV from the current channel on,
         // or the band/CStart..CEnd range for AIR/CUSTOM
     } else {
+        sChBeforeFm = gEeprom.ScreenChannel[vfo];
         SelectModeChannel(gSurvivalFmScan - 1, vfo);
         RADIO_ConfigureChannel(vfo, VFO_CONFIGURE_RELOAD);
     }
@@ -866,6 +868,19 @@ void SURVIVAL_FmStopped(void)
     sFmBgScan = false;
     if (gScanStateDir != SCAN_OFF)
         CHFRSCANNER_Stop();
+
+    // FM switched off by hand: back to the channel used before the background scan
+    const uint8_t vfo = gEeprom.TX_VFO;
+    if (sChBeforeFm != 0xFF) {
+        gEeprom.ScreenChannel[vfo] = sChBeforeFm;
+        if (IS_MR_CHANNEL(sChBeforeFm))
+            gEeprom.MrChannel[vfo] = sChBeforeFm;
+        sChBeforeFm = 0xFF;
+        RADIO_ConfigureChannel(vfo, VFO_CONFIGURE_RELOAD);
+        RADIO_SelectVfos();
+        RADIO_SetupRegisters(true);
+        gRequestSaveVFO = true;
+    }
 }
 
 bool SURVIVAL_FmBgScanning(void)
@@ -882,6 +897,7 @@ void SURVIVAL_FmBgFound(void)
     // activity on a scanned channel: leave FM for good and stay on that channel,
     // the user goes back to FM by hand (F+0 or M)
     sFmBgScan    = false;
+    sChBeforeFm  = 0xFF;   // the user stays on the channel that was heard
     sStopOnRxEnd = true;
 #ifdef ENABLE_FMRADIO
     FM_TurnOff();
@@ -1023,6 +1039,8 @@ static uint8_t sManTimer;      // half seconds left on the boot prompt
 // short feedback for keys that otherwise only beep, back to main after 1.5 s
 static void ShowMessage(const char *line1, const char *line2)
 {
+    if (gScanStateDir != SCAN_OFF && !SURVIVAL_FmBgScanning())
+        CHFRSCANNER_Stop();   // the screen switch would end the scan without its cleanup
     sMsg1 = line1;
     strncpy(sMsg2, line2 ? line2 : "", sizeof(sMsg2) - 1);
     sMsgTimer             = 3;
@@ -1039,7 +1057,28 @@ void SURVIVAL_TimeSlice500ms(void)
     sHalfSeconds++;
 
     if (sMsgTimer && --sMsgTimer == 0 && gScreenToDisplay == DISPLAY_SCANNER)
-        GUI_SelectNextDisplay(DISPLAY_MAIN);
+        GUI_SelectNextDisplay(gFmRadioMode ? DISPLAY_FM : DISPLAY_MAIN);
+
+#ifdef ENABLE_FMRADIO
+    // Eco: the background scan under FM runs 3 s, then the BK4819 receiver is off for
+    // 6 s (the AF DAC stays on for the FM audio); a station it hears stops the cycle
+    static uint8_t sBgCycle;
+    if (SURVIVAL_FmBgScanning() && SURVIVAL_EcoOn() && !FUNCTION_IsRx() && !gScanPauseMode) {
+        if (++sBgCycle == 6) {
+            gScheduleScanListen    = false;
+            gScanPauseDelayIn_10ms = 700;
+            BK4819_WriteRegister(BK4819_REG_30, BK4819_REG_30_ENABLE_AF_DAC);
+        } else if (sBgCycle >= 18) {
+            sBgCycle = 0;
+            RADIO_SetupRegisters(true);
+            gScanPauseDelayIn_10ms = 1;
+        }
+    } else if (sBgCycle) {
+        if (sBgCycle >= 6 && SURVIVAL_FmBgScanning())
+            RADIO_SetupRegisters(true);   // Eco switched off while asleep
+        sBgCycle = 0;
+    }
+#endif
 
     if (sManual == MAN_PROMPT && gScreenToDisplay == DISPLAY_SCANNER) {   // boot prompt countdown
         if (--sManTimer == 0) {

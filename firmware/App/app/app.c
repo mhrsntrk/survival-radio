@@ -1095,7 +1095,11 @@ void APP_Update(void)
             || gEeprom.BATTERY_SAVE == 0
             || gScanStateDir != SCAN_OFF
             || gCssBackgroundScan
+#ifdef ENABLE_SURVIVAL   // the survival info screens (manual, heard, skip) use the scanner slot
+            || (gScreenToDisplay != DISPLAY_MAIN && gScreenToDisplay != DISPLAY_SCANNER)
+#else
             || gScreenToDisplay != DISPLAY_MAIN
+#endif
 #ifdef ENABLE_FMRADIO
             || gFmRadioMode
 #endif

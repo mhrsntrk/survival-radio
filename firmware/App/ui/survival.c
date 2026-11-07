@@ -185,7 +185,7 @@ static const char *VfoStateText(VfoState_t state)
 
 void UI_DisplayMain(void)
 {
-    char              String[22];
+    char              String[26];   // 18 characters fit the row; the strcats below stay well inside
     char              Word[8];
     const uint8_t     vfo = gEeprom.TX_VFO;
     const VFO_Info_t *v   = &gEeprom.VfoInfo[vfo];
@@ -271,11 +271,12 @@ void UI_DisplayMain(void)
         sprintf(String, "RX ONLY SQL%u", gEeprom.SQUELCH_LEVEL);
     } else {
         PowerText(Word, v->OUTPUT_POWER);
-        sprintf(String, "%s %s SQL%u", Word, v->CHANNEL_BANDWIDTH ? "NAR" : "WIDE", gEeprom.SQUELCH_LEVEL);
+        const bool cap = SURVIVAL_TxCapped(v->pTX->Frequency);   // SAFE LIMITS: low and narrow
+        sprintf(String, "%s %s SQL%u", cap ? "CAP" : Word, (cap || v->CHANNEL_BANDWIDTH) ? "NAR" : "WIDE", gEeprom.SQUELCH_LEVEL);
     }
     if (v->TX_OFFSET_FREQUENCY_DIRECTION != TX_OFFSET_FREQUENCY_DIRECTION_OFF)
         strcat(String, " DUP");
-    if (v->pRX->CodeType != CODE_TYPE_OFF || v->pTX->CodeType != CODE_TYPE_OFF)
+    if ((v->pRX->CodeType != CODE_TYPE_OFF || v->pTX->CodeType != CODE_TYPE_OFF) && strlen(String) <= 15)
         strcat(String, " CT");
     UI_PrintStringSmallNormal(String, 0, 0, 5);
 
