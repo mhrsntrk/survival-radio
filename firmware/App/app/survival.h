@@ -47,6 +47,7 @@ extern uint8_t    gSurvivalFlags;
 #define SURV_F_SIMPLE    (1u << 1)   // simple mode: few groups, PTT behind key lock
 #define SURV_F_CUSTOM    (1u << 2)   // CUSTOM shares the air band VFO slot (range in 108-137 MHz)
 #define SURV_F_PTT_FREE  (1u << 3)   // key lock leaves PTT usable
+#define SURV_F_REWRITE   (1u << 4)   // group rewrite under way, FAV parked in the stage sector
 extern uint8_t    gSurvivalFmScan;        // FM background scan: 0 off, 1..6 = group (SURV_MODE_* + 1), 7 = last mode
 #define SURV_FMSCAN_LAST (SURV_MODE_FM + 1)
 extern uint32_t   gSurvivalCustomStart;   // CUSTOM mode scan range, 10 Hz units
@@ -111,6 +112,7 @@ void        SURVIVAL_ToolKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld);
 void        SURVIVAL_ToolDisplay(void);
 void        SURVIVAL_ToolClose(void);
 bool        SURVIVAL_BeaconActive(void);
+void        SURVIVAL_BeaconStop(void);
 void        SURVIVAL_ShowCountryPage(void);   // F+9: the emergency page of the country
 #define SURV_LISTEN_COUNT 4
 extern const char *const gSurvivalListenNames[SURV_LISTEN_COUNT];

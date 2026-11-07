@@ -1875,6 +1875,14 @@ static void ALARM_Off(void)
 
 static void ProcessKey(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 {
+#ifdef ENABLE_SURVIVAL
+    // while the SOS beacon sends, keys would be DTMF: EXIT stops it, the rest waits
+    if (SURVIVAL_BeaconActive() && gCurrentFunction == FUNCTION_TRANSMIT && Key != KEY_PTT) {
+        if (Key == KEY_EXIT && !bKeyPressed && !bKeyHeld)
+            SURVIVAL_BeaconStop();
+        return;
+    }
+#endif
     #ifdef ENABLE_FEAT_F4HWN_SLEEP
     if(gWakeUp)
     {

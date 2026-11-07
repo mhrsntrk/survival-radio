@@ -12,6 +12,7 @@
 
 #include <string.h>
 
+#include "app/action.h"
 #include "app/app.h"
 #include "app/chFrScanner.h"
 #ifdef ENABLE_FMRADIO
@@ -87,7 +88,7 @@ static void BeaconTxStart(void)
     sBeaconSent++;
 }
 
-static void BeaconStop(void)
+void SURVIVAL_BeaconStop(void)
 {
     BeaconTxStop();
     sBeaconOn        = false;
@@ -97,6 +98,13 @@ static void BeaconStop(void)
 
 static void BeaconStart(void)
 {
+    // the beacon sends on the channel on screen: no scan, no FM moving it
+    if (gScanStateDir != SCAN_OFF)
+        CHFRSCANNER_Stop();
+#ifdef ENABLE_FMRADIO
+    if (gFmRadioMode)
+        ACTION_FM();   // FM off, back to the channel used before it
+#endif
     sBeaconOn        = true;
     sBeaconLeft_s    = BEACON_TOTAL_S;
     sBeaconNext_s    = 0;
@@ -108,6 +116,10 @@ static void BeaconTick10ms(void)
 {
     if (!sBeaconTx)
         return;
+    if (gCurrentFunction != FUNCTION_TRANSMIT) {   // the TX time limit ended it
+        sBeaconTx = false;
+        return;
+    }
     if (sElemTicks) {
         sElemTicks--;
         return;
@@ -132,7 +144,7 @@ static void BeaconTick1s(void)
     if (!sBeaconOn)
         return;
     if (sBeaconLeft_s == 0 || --sBeaconLeft_s == 0) {
-        BeaconStop();
+        SURVIVAL_BeaconStop();
         return;
     }
     if (!sBeaconTx && (sBeaconNext_s == 0 || --sBeaconNext_s == 0)) {
@@ -220,6 +232,8 @@ static void ListenTick1s(void)
         return;
     if (gCurrentFunction == FUNCTION_FOREGROUND)
         FUNCTION_Select(FUNCTION_POWER_SAVE);
+    if (gCurrentFunction == FUNCTION_POWER_SAVE && !gRxIdleMode)
+        FUNCTION_Select(FUNCTION_POWER_SAVE);   // caught in a wake-up slot: back to sleep
     if (gCurrentFunction == FUNCTION_POWER_SAVE) {
         gPowerSave_10ms            = 200;   // keep the receiver asleep
         gPowerSaveCountdownExpired = false;
@@ -241,8 +255,14 @@ void SURVIVAL_ToolTick10ms(void)
 {
     static uint8_t ticks;
 
-    if (sBeaconOn && gPttIsPressed)   // the user talks: the beacon stops
-        BeaconStop();
+    // the user talks: the beacon stops (a locked PTT in a pocket does not count);
+    // a press during the beacon's own TX was taken as "already sending": start the user's
+    if (sBeaconOn && gPttIsPressed && !(gEeprom.KEY_LOCK && gSetting_set_lck)) {
+        const bool wasTx = sBeaconTx;
+        SURVIVAL_BeaconStop();
+        if (wasTx)
+            gFlagPrepareTX = true;
+    }
     BeaconTick10ms();
     if (sTool == TOOL_METER && gScreenToDisplay == DISPLAY_SCANNER)
         MeterTick10ms();
@@ -258,6 +278,8 @@ void SURVIVAL_ToolTick10ms(void)
 
 static void Open(uint8_t tool)
 {
+    if (gScanStateDir != SCAN_OFF && !SURVIVAL_FmBgScanning())
+        CHFRSCANNER_Stop();   // the screen switch would end it without its cleanup
     sTool = tool;
     sPeak = -160;
     GUI_SelectNextDisplay(DISPLAY_SCANNER);
@@ -296,7 +318,7 @@ void SURVIVAL_ToolKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
 
     if (Key == KEY_EXIT) {
         if (sTool == TOOL_BEACON && sBeaconOn) {
-            BeaconStop();
+            SURVIVAL_BeaconStop();
             gUpdateDisplay = true;
             return;   // a second EXIT leaves
         }
@@ -391,7 +413,7 @@ void SURVIVAL_ToolDisplay(void)
             sprintf(s, "BATTERY %u%% %u.%02uV", pct, gBatteryVoltageAverage / 100, gBatteryVoltageAverage % 100);
             Row(s, 0, true);
             // about 60 mA listening, 25 mA with Eco battery save (1:4), 70 mA with FM
-            sprintf(s, "LISTEN ~%uH ECO ~%uH", HoursLeft(pct, 60), HoursLeft(pct, 25));
+            sprintf(s, "RX ~%uH ECO ~%uH", HoursLeft(pct, 60), HoursLeft(pct, 25));
             Row(s, 1, false);
             sprintf(s, "FM RADIO ~%uH", HoursLeft(pct, 70));
             Row(s, 2, false);
@@ -403,7 +425,7 @@ void SURVIVAL_ToolDisplay(void)
                 if (w)
                     sprintf(s, "LISTEN IN %u MIN", w);
                 else
-                    sprintf(s, "LISTENING %s", gSurvivalListenNames[SURVIVAL_ListenWindow()]);
+                    sprintf(s, "WINDOW %s", gSurvivalListenNames[SURVIVAL_ListenWindow()]);
             } else
                 sprintf(s, "LISTEN: ALWAYS");
             Row(s, 5, false);

@@ -83,8 +83,12 @@ void UI_PrintString(const char *pString, uint8_t Start, uint8_t End, uint8_t Lin
     size_t i;
     size_t Length = strlen(pString);
 
-    if (End > Start)
+    if (End > Start && Length * Width <= (size_t)(End - Start))   // centre only what fits
         Start += (((End - Start) - (Length * Width)) + 1) / 2;
+    if (Start >= 128)
+        return;
+    if (Length > (size_t)(128 - Start) / Width)   // never past the line
+        Length = (128 - Start) / Width;
 
     for (i = 0; i < Length; i++)
     {
@@ -100,11 +104,23 @@ void UI_PrintString(const char *pString, uint8_t Start, uint8_t End, uint8_t Lin
 
 void UI_PrintStringSmall(const char *pString, uint8_t Start, uint8_t End, uint8_t Line, uint8_t char_width, const uint8_t *font)
 {
-    const size_t Length = strlen(pString);
+    size_t Length = strlen(pString);
     const unsigned int char_spacing = char_width + 1;
 
-    if (End > Start) {
+    if (End > Start && Length * char_spacing <= (size_t)(End - Start)) {   // centre only what fits
         Start += (((End - Start) - Length * char_spacing) + 1) / 2;
+    }
+    if (Start >= 128)
+        return;
+
+    char Clip[24];   // never past the line
+    if (Length > (128 - Start) / char_spacing) {
+        Length = (128 - Start) / char_spacing;
+        if (Length > sizeof(Clip) - 1)
+            Length = sizeof(Clip) - 1;
+        memcpy(Clip, pString, Length);
+        Clip[Length] = 0;
+        pString = Clip;
     }
 
     UI_PrintStringBuffer(pString, gFrameBuffer[Line] + Start, char_width, font);

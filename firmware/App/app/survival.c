@@ -1,7 +1,7 @@
 /* Survival Radio
  *
- * Channel groups are written to memory channels 0.. on first boot (marker at
- * EEPROM 0x1FF8). The group of a channel is found from its index, so scan and
+ * Channel groups are written to memory channels 0.. on first boot (settings
+ * record in flash 0x00D000 / 0x012000). The group of a channel is found from its index, so scan and
  * up/down wrap inside the group (see SURVIVAL_FindNextChannel).
  */
 
@@ -179,7 +179,7 @@ static const TxBand_t TX_BANDS[] = {
     {44600625, 44619375, SURV_TX_PMR},
     {46255000, 46272500, SURV_TX_FRS},
     {46755000, 46772500, SURV_TX_FRS},
-    {15600000, 15742500, SURV_TX_MARINE},   // ship side only, coast frequencies are RX
+    {15602500, 15742500, SURV_TX_MARINE},   // ship side only, coast frequencies are RX
     {14400000, 14600000, SURV_TX_HAM},  // 2 m, ITU region 1 (Spain)
     {43000000, 44000000, SURV_TX_HAM},  // 70 cm, ITU region 1 (Spain)
     { 2656500,  2799125, SURV_TX_CB},   // 40 ch CEPT/FCC plus national CB plans
@@ -442,7 +442,10 @@ static void MoveFav(bool park)
     }
 }
 
-static void WriteChannels(bool keepFav)
+// keepFav: rewrite the groups only. FAV is parked in the stage sector and the
+// record marks the rewrite before the channel sectors are erased: after a power cut
+// the next start finishes it from the parked copy (staged = FAV already parked).
+static void WriteChannels(bool keepFav, bool staged)
 {
     VFO_Info_t *pVfo = &gEeprom.VfoInfo[0];   // reloaded by RADIO_ConfigureChannel afterwards
     uint8_t     ch   = 0;
@@ -452,9 +455,11 @@ static void WriteChannels(bool keepFav)
     // hold only them (EEPROM 0x0000-0x0C7F and 0x0F50-0x1BCF), so each write
     // programs erased flash instead of erasing a 4 KB sector per channel.
     // A country change parks FAV first and puts it back afterwards.
-    if (keepFav) {
+    if (keepFav && !staged) {
         PY25Q16_SectorErase(SURV_FAV_STAGE);
         MoveFav(true);
+        gSurvivalFlags |= SURV_F_REWRITE;
+        SaveRecord();
     }
     PY25Q16_SectorErase(0x000000);
     PY25Q16_SectorErase(0x00e000);
@@ -463,7 +468,7 @@ static void WriteChannels(bool keepFav)
     for (uint8_t g = 0; g < ARRAY_SIZE(GROUPS); g++) {
         const SurvivalGroup_t *grp = &GROUPS[g];
 
-        for (uint8_t i = 0; i < GroupCount(g); i++, ch++) {
+        for (uint8_t i = 0; i < GroupCount(g) && ch < FavFirst(); i++, ch++) {   // never into FAV
             if (g == SURV_MODE_FRS) {   // LOCAL: the country's channels
                 const SurvivalLocal_t *loc = &Country()->local[i];
                 RADIO_InitInfo(pVfo, ch, loc->freq);
@@ -523,8 +528,11 @@ static void WriteChannels(bool keepFav)
         gSettingsBatchAttr = false;
     }
 
-    if (keepFav)
+    if (keepFav) {
         MoveFav(false);
+        gSurvivalFlags &= ~SURV_F_REWRITE;
+        SaveRecord();
+    }
 }
 
 // FM broadcast 87.5-108 MHz (an erased EEPROM reads as band 3 = 64-76 MHz)
@@ -625,12 +633,16 @@ void SURVIVAL_Init(void)
             gSurvivalFmScan = sRec.fmScan;
         gSurvivalCustomStart = sRec.customStart;
         gSurvivalCustomEnd   = sRec.customEnd;
-        if (sRec.tableVer != SURV_TABLE_VERSION) {   // new channel tables: groups only
-            WriteChannels(true);
+        if (gSurvivalFlags & SURV_F_REWRITE) {   // a power cut stopped a rewrite: finish it
+            WriteChannels(true, true);
             if (gSurvivalPrio < FavFirst())
                 gSurvivalPrio = 0xFF;
-            sRec.tableVer = SURV_TABLE_VERSION;
-            SaveRecord();
+        }
+        if (sRec.tableVer != SURV_TABLE_VERSION) {   // new channel tables: groups only
+            sRec.tableVer = SURV_TABLE_VERSION;      // saved with the rewrite mark
+            WriteChannels(true, false);
+            if (gSurvivalPrio < FavFirst())
+                gSurvivalPrio = 0xFF;
         }
         return;
     }
@@ -641,7 +653,7 @@ void SURVIVAL_Init(void)
     sRec.tableVer = SURV_TABLE_VERSION;
     sRec.listen   = 0;
     LoadCountry();
-    WriteChannels(false);
+    WriteChannels(false, false);
     WriteDefaults();
     sSkipCount = 0;
     memset(sSkip, 0, sizeof(sSkip));
@@ -1093,7 +1105,8 @@ void SURVIVAL_TimeSlice500ms(void)
     // Eco: the background scan under FM runs 3 s, then the BK4819 receiver is off for
     // 6 s (the AF DAC stays on for the FM audio); a station it hears stops the cycle
     static uint8_t sBgCycle;
-    if (SURVIVAL_FmBgScanning() && SURVIVAL_EcoOn() && !FUNCTION_IsRx() && !gScanPauseMode) {
+    if (SURVIVAL_FmBgScanning() && SURVIVAL_EcoOn() && !FUNCTION_IsRx() && !gScanPauseMode &&
+        gCurrentFunction != FUNCTION_TRANSMIT && !SURVIVAL_BeaconActive()) {
         if (++sBgCycle == 6) {
             gScheduleScanListen    = false;
             gScanPauseDelayIn_10ms = 700;
@@ -1281,9 +1294,8 @@ void SURVIVAL_SetCountry(uint8_t c)
         CHFRSCANNER_Stop();
 
     gSurvivalCountry = c;
-    sRec.country     = c;
-    SaveRecord();
-    WriteChannels(true);
+    sRec.country     = c;   // saved with the rewrite mark
+    WriteChannels(true, false);
     if (gSurvivalPrio < FavFirst())
         gSurvivalPrio = 0xFF;   // the group channels were rewritten without the mark
 
@@ -1313,7 +1325,10 @@ static bool AskCountry(void)
     gIsInSubMenu        = true;
     gAskForConfirmation = 0;
     GUI_SelectNextDisplay(DISPLAY_MENU);
+    gIsInSubMenu          = true;   // the display switch leaves the sub menu
     gRequestDisplayScreen = DISPLAY_INVALID;
+    sRec.country          = gSurvivalCountry;   // asked once: EXIT keeps EUROPE
+    SaveRecord();
     return true;
 }
 

@@ -43,7 +43,7 @@ static const SurvivalLocal_t LOCAL_UK[] = {
 
 #define L(x) ARRAY_SIZE(x), x
 
-// name, CB plan, LOCAL channels, then the rows of the country page in the manual
+// name (max 9 characters: the menu value), CB plan, LOCAL channels, then the rows of the country page in the manual
 // (F+9): emergency numbers, local channels, CB, the public FM station for news
 const SurvivalCountry_t gSurvivalCountries[] = {
     {"EU", "EUROPE", SURV_CB_CEPT, 0, NULL,
@@ -82,11 +82,11 @@ const SurvivalCountry_t gSurvivalCountries[] = {
         "112 EMERGENCY\0" "CB: 40 CH\0" "FM: LATVIJAS R. 1\0"},
     {"LT", "LITHUANIA", SURV_CB_CEPT, 0, NULL,
         "112 EMERGENCY\0" "CB: 40 CH\0" "FM: LRT RADIJAS\0"},
-    {"LU", "LUXEMBOURG", SURV_CB_CEPT, 0, NULL,
+    {"LU", "LUXEMBURG", SURV_CB_CEPT, 0, NULL,
         "112 EMERGENCY\0" "113 POLICE\0" "CB: 40 CH\0" "FM: RADIO 100,7\0"},
     {"MT", "MALTA", SURV_CB_CEPT, 0, NULL,
         "112 EMERGENCY\0" "CB: 40 CH\0" "FM: RADJU MALTA\0"},
-    {"NL", "NETHERLANDS", SURV_CB_CEPT, 0, NULL,
+    {"NL", "NEDERLAND", SURV_CB_CEPT, 0, NULL,
         "112 EMERGENCY\0" "CB: 40 CH\0" "FM: REGIONAL\0" "  OMROEP IS THE\0" "  CALAMITY RADIO\0"},
     {"PL", "POLAND", SURV_CB_PL, 0, NULL,
         "112 EMERGENCY\0" "985 MOUNTAIN /\0" "  WATER RESCUE\0" "CB: 5 KHZ LOWER\0" "  AM, CH 19 ROADS\0" "FM: PR JEDYNKA\0"},
