@@ -800,6 +800,11 @@ void SURVIVAL_SetTeamWatch(uint8_t w)
     SaveRecord();
 }
 
+bool SURVIVAL_IsPmrChannel(uint8_t ch)
+{
+    return IS_MR_CHANNEL(ch) && FindGroup(ch) == SURV_MODE_PMR;
+}
+
 // PMR channels carry the team tone (CTCSS) on receive and send: other users of the
 // channel stay silent, team radios hear each other
 void SURVIVAL_TeamApply(VFO_Info_t *pVfo)
@@ -1089,6 +1094,11 @@ static void RemoveFav(uint8_t c)
 void SURVIVAL_AddFav(void)
 {
     VFO_Info_t     vfo   = *gTxVfo;
+    if (SURVIVAL_IsPmrChannel(vfo.CHANNEL_SAVE) && SURVIVAL_Team()) {
+        // the team tone is added on the fly: a FAV copy is a plain PMR channel
+        vfo.freq_config_RX.CodeType = CODE_TYPE_OFF;
+        vfo.freq_config_TX.CodeType = CODE_TYPE_OFF;
+    }
     const uint32_t f     = vfo.freq_config_RX.Frequency;
     uint8_t        slot  = 0xFF;
     uint8_t        match = 0xFF;

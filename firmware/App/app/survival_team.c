@@ -106,6 +106,9 @@ static uint8_t    sClockSec;
 static uint16_t   sPongDelay_10ms;      // > 0: a PONG is due
 static uint16_t   sWatch_s;
 static uint8_t    sLastTalker = 0xFF;
+static uint8_t    sPingDbm;             // how strong the last PING arrived (-dBm)
+static uint8_t    sPongTries;
+static uint32_t   sCheckAt;             // uptime of our last check, 0: none open
 static uint8_t    sLastTalker_s;
 
 static uint16_t Crc(const Packet_t *p)
@@ -158,14 +161,17 @@ void SURVIVAL_TeamRxOn(void)
     FskConfig();
     BK4819_WriteRegister(BK4819_REG_5E, (64u << 3) | (1u << 0));   // almost full: 1 word
     BK4819_WriteRegister(BK4819_REG_5D, (uint16_t)(sizeof(Packet_t) + 2) << 8);
+    if (sRxActive)   // a packet is coming in (the sender's CTCSS stops under data): keep it
+        return;
     BK4819_WriteRegister(BK4819_REG_59, (1u << 15) | (1u << 14) | REG59_BASE);   // clear FIFOs
     BK4819_WriteRegister(BK4819_REG_59, (1u << 12) | REG59_BASE);               // RX on
-    sRxActive = false;
+    BK4819_WriteRegister(BK4819_REG_02, 0);
 }
 
 uint16_t SURVIVAL_TeamIrqMask(void)
 {
-    return sRxOn ? (BK4819_REG_3F_FSK_RX_SYNC | BK4819_REG_3F_FSK_RX_FINISHED | BK4819_REG_3F_FSK_FIFO_ALMOST_FULL) : 0;
+    return sRxOn ? (BK4819_REG_3F_FSK_RX_SYNC | BK4819_REG_3F_FSK_RX_FINISHED | BK4819_REG_3F_FSK_FIFO_ALMOST_FULL |
+                    BK4819_REG_3F_FSK_TX_FINISHED) : 0;   // TX finished: FskSend sees the end at once
 }
 
 void SURVIVAL_TeamRxOff(void)
@@ -186,7 +192,8 @@ static void FskSend(const Packet_t *p)
     const uint16_t filt = BK4819_ReadRegister(BK4819_REG_2B);
 
     BK4819_WriteRegister(BK4819_REG_51, 0);   // no CTCSS under the data
-    BK4819_WriteRegister(BK4819_REG_40, (dev & 0xF000) | (gCurrentVfo->CHANNEL_BANDWIDTH == BK4819_FILTER_BW_WIDE ? 1050 : 850));
+    const bool wide = gCurrentVfo->CHANNEL_BANDWIDTH == BK4819_FILTER_BW_WIDE && !SURVIVAL_TxCapped(gCurrentVfo->pTX->Frequency);
+    BK4819_WriteRegister(BK4819_REG_40, (dev & 0xF000) | (wide ? 1050 : 850));
     BK4819_WriteRegister(BK4819_REG_2B, (1u << 2) | (1u << 0));   // no TX HPF / pre-emphasis
 
     FskConfig();
@@ -239,8 +246,10 @@ static bool SendAlone(uint8_t type, uint8_t arg)
 {
     Packet_t p;
 
-    if (gCurrentFunction == FUNCTION_TRANSMIT || gCurrentFunction == FUNCTION_RECEIVE)
+    if (gCurrentFunction == FUNCTION_TRANSMIT || FUNCTION_IsRx())
         return false;
+    if (!SURVIVAL_IsPmrChannel(gEeprom.ScreenChannel[gEeprom.TX_VFO]))
+        return false;   // team packets only on the PMR channels
     if (gScanStateDir != SCAN_OFF)
         CHFRSCANNER_Stop();
 
@@ -248,7 +257,7 @@ static bool SendAlone(uint8_t type, uint8_t arg)
     if (gCurrentFunction != FUNCTION_TRANSMIT)
         return false;
 
-    BK4819_PlaySingleTone(1000, 300, 28, false);   // wakes radios in battery save
+    BK4819_PlaySingleTone(1000, 700, 28, false);   // longer than a battery save sleep: wakes the others
     Fill(&p, type, arg);
     FskSend(&p);
     RADIO_SendEndOfTransmission();   // not APP_EndTransmission: no ID packet after this one
@@ -261,7 +270,8 @@ static bool SendAlone(uint8_t type, uint8_t arg)
 // PTT released with a team code: the others see who talked (still transmitting here)
 void SURVIVAL_TeamSendId(void)
 {
-    if (!SURVIVAL_Team() || gCurrentFunction != FUNCTION_TRANSMIT || SURVIVAL_BeaconActive())
+    if (!SURVIVAL_Team() || gCurrentFunction != FUNCTION_TRANSMIT || SURVIVAL_BeaconActive() ||
+        !SURVIVAL_IsPmrChannel(gEeprom.ScreenChannel[gEeprom.TX_VFO]))
         return;
     Packet_t p;
     Fill(&p, PKT_ID, 0);
@@ -302,8 +312,16 @@ static void Handle(const Packet_t *p, int16_t dbm)
 {
     if (p->magic[0] != 'S' || p->magic[1] != 'R' || p->crc != Crc(p))
         return;
-    if (p->team != SURVIVAL_Team() || p->from >= SURV_NAME_COUNT || p->from == SURVIVAL_TeamName())
+    if (p->team != SURVIVAL_Team() || p->from >= SURV_NAME_COUNT)
         return;
+    if (p->from == SURVIVAL_TeamName()) {   // another radio of the team uses our name
+        static bool told;
+        if (!told) {
+            told = true;
+            SURVIVAL_Message("SAME NAME!", "MENU>NAME");
+        }
+        return;
+    }
 
     static uint8_t lastFrom = 0xFF, lastSeq;
     if (p->from == lastFrom && p->seq == lastSeq)
@@ -330,8 +348,11 @@ static void Handle(const Packet_t *p, int16_t dbm)
             break;
         case PKT_PING:
             pt->rssi = dbm / 2;
-            if (SURVIVAL_TeamAutoReply())   // answer after a delay of our own, so answers do not collide
-                sPongDelay_10ms = 40 + (SURVIVAL_TeamName() % 10) * 25;
+            sPingDbm = (uint8_t)(dbm < 0 ? -dbm : 0);
+            if (SURVIVAL_TeamAutoReply()) {   // an answer slot per name (1.2 s apart): answers do not collide
+                sPongDelay_10ms = 30 + (SURVIVAL_TeamName() % 12) * 120;
+                sPongTries      = 10;
+            }
             break;
         case PKT_PONG:
             pt->rssi = -(int8_t)(p->arg / 2);
@@ -367,6 +388,14 @@ void SURVIVAL_TeamIrq(uint16_t bits)
         }
     }
     if (bits & BK4819_REG_02_FSK_RX_FINISHED) {
+        // words the almost-full interrupts did not fetch (a beep may have held the loop)
+        uint8_t *b = (uint8_t *)&sRx;
+        while (sRxActive && sRxIndex < sizeof(sRx)) {
+            const uint16_t w = BK4819_ReadRegister(BK4819_REG_5F);
+            b[sRxIndex++] = w & 0xFF;
+            if (sRxIndex < sizeof(sRx))
+                b[sRxIndex++] = w >> 8;
+        }
         BK4819_WriteRegister(BK4819_REG_59, (1u << 15) | (1u << 14) | REG59_BASE);
         BK4819_WriteRegister(BK4819_REG_59, (1u << 12) | REG59_BASE);
         if (sRxActive && sRxIndex >= sizeof(sRx))
@@ -380,23 +409,39 @@ void SURVIVAL_TeamIrq(uint16_t bits)
 static const uint8_t WATCH_MIN[SURV_WATCH_COUNT] = {0, 10, 30, 60};
 const char *const gSurvivalWatchNames[SURV_WATCH_COUNT] = {"OFF", "10 MIN", "30 MIN", "60 MIN"};
 
-static void Check(void)
+static bool Check(void)
 {
-    if (!SendAlone(PKT_PING, 0)) {
-        gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
-        return;
+    if (!SendAlone(PKT_PING, 0))
+        return false;
+    sCheckAt = sUptime_s;
+    return true;
+}
+
+// 15 s after a check (all answer slots are over): who did not answer missed one;
+// two misses in a row raise the alarm once (Watch only)
+static void CountMisses(void)
+{
+    for (uint8_t i = 0; i < PARTNER_N; i++) {
+        Partner_t *p = &sPartner[i];
+        if (p->name == 0xFF || p->at_s >= sCheckAt)
+            continue;
+        if (p->missed < 255)
+            p->missed++;
+        if (p->missed == 2 && SURVIVAL_TeamWatch()) {
+            gBeepToPlay = BEEP_440HZ_500MS;
+            BACKLIGHT_TurnOn();
+            SURVIVAL_Message("LOST CONTACT", gSurvivalNames[p->name]);
+        }
     }
-    // partners that did not answer the last check
-    for (uint8_t i = 0; i < PARTNER_N; i++)
-        if (sPartner[i].name != 0xFF && sPartner[i].at_s + 5 < sUptime_s)
-            sPartner[i].missed++;
 }
 
 void SURVIVAL_TeamTick10ms(void)
 {
     if (sPongDelay_10ms && --sPongDelay_10ms == 0 && SURVIVAL_Team()) {
-        const int16_t dbm = BK4819_GetRSSI_dBm();
-        SendAlone(PKT_PONG, (uint8_t)(dbm < 0 ? -dbm : 0));
+        // busy (receiving, sending, scanning): try again a little later
+        if (gScanStateDir != SCAN_OFF || !SendAlone(PKT_PONG, sPingDbm))
+            if (sPongTries && --sPongTries)
+                sPongDelay_10ms = 60;
     }
 }
 
@@ -413,24 +458,29 @@ void SURVIVAL_TeamTick1s(void)
         gUpdateDisplay = true;
     }
 
-    // Watch: a check every few minutes; a partner missing two in a row raises the alarm
+    // key beeps switch the FSK tone off (REG_70): back on while listening
+    if (sRxOn && gCurrentFunction != FUNCTION_TRANSMIT)
+        BK4819_WriteRegister(BK4819_REG_70, (1u << 7) | (96u << 0));
+
+    if (sCheckAt && sUptime_s >= sCheckAt + 15) {
+        CountMisses();
+        sCheckAt = 0;
+    }
+
+    // Watch: a check every few minutes (not while the listen windows keep the team
+    // asleep, not during a scan: then a little later)
     const uint8_t w = SURVIVAL_TeamWatch();
     if (!SURVIVAL_Team() || w == 0 || w >= SURV_WATCH_COUNT) {
         sWatch_s = 0;
         return;
     }
-    if (++sWatch_s < WATCH_MIN[w] * 60u)
+    if (sWatch_s < WATCH_MIN[w] * 60u) {
+        sWatch_s++;
+        return;
+    }
+    if (SURVIVAL_ListenWaitMin() || gScanStateDir != SCAN_OFF || !Check())
         return;
     sWatch_s = 0;
-    // after the previous check (5 s for answers): partners without one count a miss
-    Check();
-    for (uint8_t i = 0; i < PARTNER_N; i++) {
-        if (sPartner[i].name != 0xFF && sPartner[i].missed == 2) {
-            gBeepToPlay = BEEP_440HZ_500MS;
-            BACKLIGHT_TurnOn();
-            SURVIVAL_Message("LOST CONTACT", gSurvivalNames[sPartner[i].name]);
-        }
-    }
 }
 
 // name of the radio that talked last (ID packet), NULL after 15 s
@@ -457,7 +507,7 @@ static void Age(char *s, uint32_t at_s)
     else if (a < 3600)
         sprintf(s, "%um", (unsigned)(a / 60));
     else
-        sprintf(s, "%uh", (unsigned)(a / 3600));
+        sprintf(s, "%uh", (unsigned)(a < 99u * 3600 ? a / 3600 : 99));
 }
 
 void SURVIVAL_TeamKeys(KEY_Code_t Key)
@@ -477,8 +527,10 @@ void SURVIVAL_TeamKeys(KEY_Code_t Key)
                 if (SendAlone(PKT_MSG, sPick)) {
                     AddLog(SURVIVAL_TeamName(), sPick);
                     gBeepToPlay = BEEP_1KHZ_60MS_OPTIONAL;
-                } else
+                } else {
                     gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+                    SURVIVAL_Message("TEAM: USE A", "PMR CHANNEL");
+                }
                 sView = VIEW_LOG;
             } else if (Key == KEY_EXIT)
                 sView = VIEW_LOG;
@@ -487,7 +539,10 @@ void SURVIVAL_TeamKeys(KEY_Code_t Key)
             if (Key == KEY_MENU)
                 sView = VIEW_PICK;
             else if (Key == KEY_STAR) {
-                Check();
+                if (!Check()) {
+                    gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;
+                    SURVIVAL_Message("TEAM: USE A", "PMR CHANNEL");
+                }
                 sView = VIEW_PARTNERS;
             } else if (Key == KEY_UP || Key == KEY_DOWN)
                 sView = (sView == VIEW_LOG) ? VIEW_PARTNERS : VIEW_LOG;

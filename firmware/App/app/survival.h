@@ -129,6 +129,7 @@ void        SURVIVAL_SetSimple(bool on);
 extern const char *const gSurvivalNames[SURV_NAME_COUNT];
 extern const char *const gSurvivalWatchNames[SURV_WATCH_COUNT];
 uint8_t     SURVIVAL_Team(void);              // 0 = off
+bool        SURVIVAL_IsPmrChannel(uint8_t ch);   // team packets go on PMR only
 void        SURVIVAL_SetTeam(uint8_t t);
 uint8_t     SURVIVAL_TeamName(void);
 void        SURVIVAL_SetTeamName(uint8_t n);
