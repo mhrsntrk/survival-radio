@@ -203,7 +203,7 @@
                 "ENABLE_FEAT_F4HWN_GMRS_FRS_MURS": true,
                 "ENABLE_AM_FIX": true,
                 "ENABLE_SPECTRUM": false,
-                "ENABLE_VOX": false,
+                "ENABLE_VOX": true,
                 "ENABLE_AIRCOPY": false,
                 "ENABLE_FEAT_F4HWN_GAME": false,
                 "ENABLE_NOAA": false,

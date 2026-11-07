@@ -62,7 +62,8 @@ typedef struct {
     uint32_t customStart;   // 10 Hz units
     uint32_t customEnd;
     uint32_t skip[SURV_SKIP_N];
-    uint8_t  reserved[6];
+    uint8_t  defaultsRev;   // new defaults given to radios set up before them
+    uint8_t  reserved[5];
     uint16_t crc;
 } SurvRecord_t;
 
@@ -563,6 +564,7 @@ static void WriteDefaults(void)
     gSetting_set_inv                 = false;   // normal (not negative) display
     gSetting_set_ctr                 = 10;      // F4HWN default contrast, blank EEPROM reads as 15
     gSetting_set_lck                 = true;    // key lock locks PTT too: no pocket calls
+    gEeprom.ROGER                    = ROGER_MODE_ROGER;   // a beep tells the other side it is their turn
 
     gEeprom.TX_VFO = 0;
     for (uint8_t vfo = 0; vfo < 2; vfo++) {
@@ -612,9 +614,28 @@ void SURVIVAL_SaveCustomRange(void)
     SaveRecord();
 }
 
+// first start: a copy of the factory calibration (512 bytes at 0x010000, unique to the
+// radio) in a spare sector, 0x014000, kept as long as it is there
+#define SURV_CAL_COPY 0x014000
+
+static void BackupCalibration(void)
+{
+    uint8_t buf[64];
+    PY25Q16_ReadBuffer(SURV_CAL_COPY, buf, 4);
+    if (buf[0] != 0xFF || buf[1] != 0xFF || buf[2] != 0xFF || buf[3] != 0xFF)
+        return;   // already copied
+    PY25Q16_SectorErase(SURV_CAL_COPY);
+    for (uint16_t ofs = 0; ofs < 512; ofs += sizeof(buf)) {
+        PY25Q16_ReadBuffer(0x010000 + ofs, buf, sizeof(buf));
+        PY25Q16_WriteBuffer(SURV_CAL_COPY + ofs, buf, sizeof(buf), false);
+    }
+}
+
 void SURVIVAL_Init(void)
 {
     const bool known = LoadRecord();
+
+    BackupCalibration();
 
     // the priority channel is marked with the (otherwise unused) scan list 1 bit
     for (uint8_t c = 0; IS_MR_CHANNEL(c); c++) {
@@ -633,6 +654,12 @@ void SURVIVAL_Init(void)
             gSurvivalFmScan = sRec.fmScan;
         gSurvivalCustomStart = sRec.customStart;
         gSurvivalCustomEnd   = sRec.customEnd;
+        if (sRec.defaultsRev == 0xFF) {   // rev 1: roger beep on
+            gEeprom.ROGER    = ROGER_MODE_ROGER;
+            SETTINGS_SaveSettings();
+            sRec.defaultsRev = 1;
+            SaveRecord();
+        }
         if (gSurvivalFlags & SURV_F_REWRITE) {   // a power cut stopped a rewrite: finish it
             WriteChannels(true, true);
             if (gSurvivalPrio < FavFirst())
@@ -663,6 +690,7 @@ void SURVIVAL_Init(void)
     gSurvivalCustomStart = SURV_RANGE_START;
     gSurvivalCustomEnd   = SURV_RANGE_END;
     memset(sRec.reserved, 0xFF, sizeof(sRec.reserved));
+    sRec.defaultsRev = 1;
     SaveRecord();
 }
 
@@ -1079,6 +1107,11 @@ static uint8_t sManTimer;      // half seconds left on the boot prompt
 
 
 // short feedback for keys that otherwise only beep, back to main after 1.5 s
+void SURVIVAL_Message(const char *line1, const char *line2)
+{
+    ShowMessage(line1, line2);
+}
+
 static void ShowMessage(const char *line1, const char *line2)
 {
     if (gScanStateDir != SCAN_OFF && !SURVIVAL_FmBgScanning())

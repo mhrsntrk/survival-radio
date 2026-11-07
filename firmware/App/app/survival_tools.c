@@ -240,6 +240,35 @@ static void ListenTick1s(void)
     }
 }
 
+// ---------------------------------------------------------------- battery reserve
+// below 20 %: Eco on and, if none is set, listen windows 5 of every 60 minutes
+static bool sReserve;
+
+bool SURVIVAL_Reserve(void)
+{
+    return sReserve;
+}
+
+static void ReserveTick1s(void)
+{
+    const uint8_t pct = BATTERY_VoltsToPercent(gBatteryVoltageAverage);
+    if (sReserve) {
+        if (pct > 40)   // charged
+            sReserve = false;
+        return;
+    }
+    if (pct == 0 || pct >= 20 || gChargingWithTypeC)
+        return;
+    sReserve = true;
+    if (!SURVIVAL_EcoOn())
+        SURVIVAL_SetEco(true);
+    if (SURVIVAL_ListenWindow() == 0)
+        SURVIVAL_SetListen(2);
+    gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP;
+    if (gScreenToDisplay == DISPLAY_MAIN)
+        SURVIVAL_Message("BATTERY RESERVE", "ECO, LISTEN 5/60");
+}
+
 // ---------------------------------------------------------------- battery estimate
 static const uint16_t BATTERY_MAH[] = {1600, 2200, 3500, 1500, 2500};
 
@@ -271,6 +300,7 @@ void SURVIVAL_ToolTick10ms(void)
         ticks = 0;
         BeaconTick1s();
         ListenTick1s();
+        ReserveTick1s();
         if (sTool && gScreenToDisplay == DISPLAY_SCANNER)
             gUpdateDisplay = true;
     }
@@ -419,7 +449,7 @@ void SURVIVAL_ToolDisplay(void)
             Row(s, 2, false);
             sprintf(s, "%s", SURVIVAL_CountryName(gSurvivalCountry));
             Row(s, 3, false);
-            Row((gSurvivalFlags & SURV_F_NO_LIMITS) ? "LIMITS OFF (SOS)" : "SAFE LIMITS ON", 4, false);
+            Row((gSurvivalFlags & SURV_F_NO_LIMITS) ? "LIMITS OFF (SOS)" : sReserve ? "BATTERY RESERVE" : "SAFE LIMITS ON", 4, false);
             if (SURVIVAL_ListenWindow()) {
                 const uint8_t w = SURVIVAL_ListenWaitMin();
                 if (w)

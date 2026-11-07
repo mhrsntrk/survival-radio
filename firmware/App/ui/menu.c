@@ -88,6 +88,10 @@ const t_menu_item MenuList[] =
     {"Rename",      MENU_MEM_NAME,       "CH NAME"    },
     {"Lock",        MENU_AUTOLK,         "AUTO LOCK"  },
     {"LockTx",      MENU_SET_LCK,        "LOCK ALSO"  },
+    {"Roger",       MENU_ROGER,          "END BEEP"   },
+#ifdef ENABLE_VOX
+    {"VOX",         MENU_VOX,            "HANDS FREE" },
+#endif
     {"TxTime",      MENU_TOT,            "TX LIMIT"   },
     {"Mic",         MENU_MIC,            "MIC GAIN"   },
     {"Light",       MENU_ABR,            "BACKLIGHT"  },
@@ -883,14 +887,12 @@ void UI_DisplayMenu(void)
 #endif
 #endif
 
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_VOX:
             #ifdef ENABLE_VOX
                 sprintf(String, gSubMenuSelection == 0 ? gSubMenu_OFF_ON[0] : "%u", gSubMenuSelection);
             #else
                 strcpy(String, gSubMenu_NA);
-            #endif
-            break;
+                        break;
 #endif
 
         case MENU_ABR:
@@ -1223,11 +1225,9 @@ void UI_DisplayMenu(void)
             break;
 #endif
 
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_ROGER:
             strcpy(String, gSubMenu_ROGER[gSubMenuSelection]);
             break;
-#endif
 
         case MENU_VOL:
 #ifdef ENABLE_FEAT_F4HWN

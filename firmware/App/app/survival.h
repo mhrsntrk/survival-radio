@@ -121,6 +121,8 @@ void        SURVIVAL_SetListen(uint8_t l);
 uint8_t     SURVIVAL_ListenWaitMin(void);     // minutes to the next window, 0 = open
 void        SURVIVAL_ListenRestart(void);
 void        SURVIVAL_SetSimple(bool on);
+void        SURVIVAL_Message(const char *line1, const char *line2);   // 1.5 s feedback screen
+bool        SURVIVAL_Reserve(void);           // battery reserve mode is on
 
 // FM radio with a background scan of one group on the BK4819
 void    SURVIVAL_FmStarted(void);

@@ -220,12 +220,10 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
             *pMax = 104;
             break;
 
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_ROGER:
             //*pMin = 0;
             *pMax = ARRAY_SIZE(gSubMenu_ROGER) - 1;
             break;
-#endif
 
 #ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_PONMSG:
@@ -347,10 +345,15 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
             *pMax = 179;
             break;
 
+#if defined(ENABLE_VOX) && defined(ENABLE_SURVIVAL)
+        case MENU_VOX:   // OFF, then sensitivity 1-10
+            *pMax = 10;
+            break;
+#endif
+#ifndef ENABLE_SURVIVAL   // not in the survival menu
         #ifdef ENABLE_VOX
             case MENU_VOX:
         #endif
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_RP_STE:
             //*pMin = 0;
             *pMax = 10;
@@ -982,11 +985,9 @@ void MENU_AcceptSetting(void)
             break;
 #endif
 
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_ROGER:
             gEeprom.ROGER = gSubMenuSelection;
             break;
-#endif
 
         case MENU_AM:
             gTxVfo->Modulation     = gSubMenuSelection;
@@ -1382,11 +1383,9 @@ void MENU_ShowCurrentSetting(void)
 #endif
 
 #ifdef ENABLE_VOX
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_VOX:
             gSubMenuSelection = gEeprom.VOX_SWITCH ? gEeprom.VOX_LEVEL + 1 : 0;
             break;
-#endif
 #endif
 
         case MENU_ABR:
@@ -1594,11 +1593,9 @@ void MENU_ShowCurrentSetting(void)
             break;
 #endif
 
-#ifndef ENABLE_SURVIVAL   // not in the survival menu
         case MENU_ROGER:
             gSubMenuSelection = gEeprom.ROGER;
             break;
-#endif
 
         case MENU_AM:
             gSubMenuSelection = gTxVfo->Modulation;
