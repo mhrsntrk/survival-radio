@@ -814,11 +814,17 @@ static void CheckRadioInterrupts(void)
             AIRCOPY_StorePacket();
         }
 #endif
+#ifdef ENABLE_SURVIVAL
+        SURVIVAL_TeamIrq(interrupts.__raw);
+#endif
     }
 }
 
 void APP_EndTransmission(void)
 {
+#ifdef ENABLE_SURVIVAL
+    SURVIVAL_TeamSendId();   // a team radio says who talked, before the carrier goes
+#endif
     // back to RX mode
     RADIO_SendEndOfTransmission();
 

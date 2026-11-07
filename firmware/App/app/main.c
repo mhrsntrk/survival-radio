@@ -245,7 +245,7 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
             return;
         case KEY_3:
             gWasFKeyPressed = false;
-            SURVIVAL_ShowStatus();
+            SURVIVAL_ShowTeam();
             return;
         case KEY_9:
             gWasFKeyPressed = false;

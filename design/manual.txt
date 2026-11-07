@@ -30,7 +30,7 @@ Tap F, then a key:
 # short rows: the F help shows them in two columns of 9 characters
 1>Beacon
 2>Meter
-3>Status
+3>Team
 4>Heard
 5>Prio
 6>Manual
@@ -91,6 +91,43 @@ Urgent, no danger
   PAN-PAN x3
 Safety warning:
   SECURITE x3
+
+== TEAM
+Same Menu>Team
+  code on all
+  your radios:
+PMR then hears
+  only your team
+Menu>Name: who
+  you are
+F+3>Team screen
+M>Send a message
+*>Check: who hears
+  you, signal,
+  battery
+UP/DN>Messages /
+  partners
+After PTT the
+  others see your
+  name (TALKED:)
+Adv>Watch: checks
+  every 10-60 min,
+  alarm if one is
+  lost
+Adv>Reply OFF:
+  no auto answer
+
+== CLOCK
+Menu>Clock: time
+  now (5 min)
+Lost when off:
+  set it again,
+  or a team check
+  copies it from
+  a partner
+Listen windows
+  then open on
+  the hour
 
 == SOS BEACON
 F+1>Beacon screen
@@ -281,7 +318,8 @@ Sets LOCAL group,
 FAV stays
 
 == BATTERY
-F+3>Percent and
+Menu>Status:
+  percent and
   hours left
 Menu>Eco ON:
   saves power,
@@ -292,9 +330,22 @@ Menu>Listen:
   min every 30/60
 LOW power is fine
   for near calls
+Below 20%: Eco
+  and listen 5/60
+  go on (RESERVE)
 Cold drains it:
   keep it warm
   inside clothes
+
+== HANDS FREE
+Adv>VOX 1-10:
+  sends when you
+  speak, no PTT
+1 = loud voice
+  needed, 10 =
+  very sensitive
+Adv>Roger: beep
+  at end of talk
 
 == KEY LOCK
 HOLD F>Lock keys

@@ -150,6 +150,26 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
         case MENU_SRV_LISTEN:
             *pMax = SURV_LISTEN_COUNT - 1;
             break;
+
+        case MENU_SRV_TEAM:
+            *pMax = SURV_TEAM_MAX;
+            break;
+
+        case MENU_SRV_NAME:
+            *pMax = SURV_NAME_COUNT - 1;
+            break;
+
+        case MENU_SRV_CLOCK:   // --:--, then 00:00 .. 23:55 in 5 minute steps
+            *pMax = 288;
+            break;
+
+        case MENU_SRV_WATCH:
+            *pMax = SURV_WATCH_COUNT - 1;
+            break;
+
+        case MENU_SRV_REPLY:
+            *pMax = 1;
+            break;
 #endif
 
         case MENU_SQL:
@@ -596,6 +616,26 @@ void MENU_AcceptSetting(void)
 
         case MENU_SRV_LISTEN:
             SURVIVAL_SetListen(gSubMenuSelection);
+            return;
+
+        case MENU_SRV_TEAM:
+            SURVIVAL_SetTeam(gSubMenuSelection);
+            return;
+
+        case MENU_SRV_NAME:
+            SURVIVAL_SetTeamName(gSubMenuSelection);
+            return;
+
+        case MENU_SRV_CLOCK:
+            SURVIVAL_SetClockMin(gSubMenuSelection ? (gSubMenuSelection - 1) * 5 : 0xFFFF);
+            return;
+
+        case MENU_SRV_WATCH:
+            SURVIVAL_SetTeamWatch(gSubMenuSelection);
+            return;
+
+        case MENU_SRV_REPLY:
+            SURVIVAL_SetTeamAutoReply(gSubMenuSelection);
             return;
 
         case MENU_SRV_LIMITS:
@@ -1254,6 +1294,28 @@ void MENU_ShowCurrentSetting(void)
 
         case MENU_SRV_LISTEN:
             gSubMenuSelection = SURVIVAL_ListenWindow();
+            break;
+
+        case MENU_SRV_TEAM:
+            gSubMenuSelection = SURVIVAL_Team();
+            break;
+
+        case MENU_SRV_NAME:
+            gSubMenuSelection = SURVIVAL_TeamName();
+            break;
+
+        case MENU_SRV_CLOCK: {
+            const uint16_t m = SURVIVAL_ClockMin();
+            gSubMenuSelection = (m < 1440) ? m / 5 + 1 : 0;
+            break;
+        }
+
+        case MENU_SRV_WATCH:
+            gSubMenuSelection = SURVIVAL_TeamWatch();
+            break;
+
+        case MENU_SRV_REPLY:
+            gSubMenuSelection = SURVIVAL_TeamAutoReply();
             break;
 
         case MENU_SRV_TX_PMR ... MENU_SRV_TX_ALL:
@@ -2059,6 +2121,7 @@ static void MENU_SurvivalAction(uint8_t id)
         case MENU_SRV_PRIO:  SURVIVAL_TogglePrio();  break;
         case MENU_SRV_RADIO: SURVIVAL_ToggleFm();    break;
         case MENU_SRV_HELP:  SURVIVAL_ShowManual();  break;
+        case MENU_SRV_STATUS: SURVIVAL_ShowStatus(); break;
     }
 }
 #endif

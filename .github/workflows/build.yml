@@ -1,0 +1,64 @@
+name: Build
+
+# Every push and pull request compiles the firmware; a tag v* also publishes it as a release.
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  ARM_GCC: arm-gnu-toolchain-13.3.rel1-x86_64-arm-none-eabi
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ARM toolchain (13.3, same as the Docker build)
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/${{ env.ARM_GCC }}
+          key: ${{ env.ARM_GCC }}
+
+      - name: Download the toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL "https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu/13.3.rel1/binrel/${ARM_GCC}.tar.xz" | tar -xJ -C ~
+
+      - name: CMake and Ninja
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq cmake ninja-build
+
+      - name: Manual is up to date
+        run: |
+          python3 tools/manual2c.py
+          git diff --exit-code firmware/App/app/survival_manual.c
+
+      - name: Build
+        run: |
+          export PATH="$HOME/$ARM_GCC/bin:$PATH"
+          VERSION="${GITHUB_REF_NAME}"
+          case "$VERSION" in v*) ;; *) VERSION="v1.0" ;; esac
+          cd firmware
+          cmake --preset Survival -DVERSION_STRING_2="$VERSION" -DSURVIVAL_VERSION="$VERSION"
+          cmake --build --preset Survival -j
+          cp build/Survival/firmware.bin ../survival-radio.bin
+          arm-none-eabi-size build/Survival/firmware.elf
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: survival-radio
+          path: survival-radio.bin
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" survival-radio.bin --title "Survival Radio $GITHUB_REF_NAME" --generate-notes

@@ -53,6 +53,9 @@ const t_menu_item MenuList[] =
     // Basic
     {"Group",       MENU_SRV_GROUP,      "USE GROUP"  },
     {"Simple",      MENU_SRV_SIMPLE,     "SIMPLE MODE"},
+    {"Team",        MENU_SRV_TEAM,       "TEAM CODE"  },
+    {"Name",        MENU_SRV_NAME,       "MY NAME"    },
+    {"Clock",       MENU_SRV_CLOCK,      "TIME NOW"   },
     {"Region",      MENU_SRV_COUNTRY,    "COUNTRY"    },
     {"Heard",       MENU_SRV_HEARD,      "LAST HEARD" },
     {"Skip",        MENU_SRV_SKIP,       "SKIP LIST"  },
@@ -64,10 +67,13 @@ const t_menu_item MenuList[] =
     {"Eco",         MENU_SRV_ECO,        "SAVE POWER" },
     {"Listen",      MENU_SRV_LISTEN,     "LISTEN TIME"},
     {"Radio",       MENU_SRV_RADIO,      "FM RADIO"   },
+    {"Status",      MENU_SRV_STATUS,     "BATTERY"    },
     {"Help",        MENU_SRV_HELP,       "MANUAL"     },
     {"Adv",         MENU_SRV_ADV,        "ADVANCED"   },   // SURV_BASIC_COUNT items up to here
     // Advanced
     {"FmScan",      MENU_SRV_FM_SCAN,    "FM SCAN"    },
+    {"Watch",       MENU_SRV_WATCH,      "TEAM WATCH" },
+    {"Reply",       MENU_SRV_REPLY,      "AUTO ANSWER"},
     {"Mod",         MENU_AM,             "MODULATION" },
     {"Width",       MENU_W_N,            "BANDWIDTH"  },
     {"Step",        MENU_STEP,           "TUNE STEP"  },
@@ -608,7 +614,7 @@ void UI_DisplayMenu(void)
         UI_PrintStringSmallNormal(
             gAskForConfirmation          ? "M:YES  EXIT:NO" :
             gIsInSubMenu                 ? "M:SAVE EXIT:CANCEL" :
-            id == MENU_SRV_ADV || id == MENU_SRV_HEARD || id == MENU_SRV_SKIP || id == MENU_SRV_HELP ? "M:OPEN EXIT:BACK" :
+            id == MENU_SRV_ADV || id == MENU_SRV_HEARD || id == MENU_SRV_SKIP || id == MENU_SRV_HELP || id == MENU_SRV_STATUS ? "M:OPEN EXIT:BACK" :
             IS_SURV_ACTION(id)           ? "M:DO   EXIT:BACK" : "M:EDIT EXIT:BACK", 0, 0, 6);
     }
 #else
@@ -751,6 +757,33 @@ void UI_DisplayMenu(void)
 
         case MENU_SRV_LISTEN:
             strcpy(String, gSurvivalListenNames[gSubMenuSelection]);
+            break;
+
+        case MENU_SRV_TEAM:
+            if (gSubMenuSelection == 0)
+                strcpy(String, "OFF");
+            else
+                sprintf(String, "%u\n%u.%uHZ", (unsigned)gSubMenuSelection,
+                        CTCSS_Options[gSubMenuSelection - 1] / 10, CTCSS_Options[gSubMenuSelection - 1] % 10);
+            break;
+
+        case MENU_SRV_NAME:
+            strcpy(String, gSurvivalNames[gSubMenuSelection]);
+            break;
+
+        case MENU_SRV_CLOCK:
+            if (gSubMenuSelection == 0)
+                strcpy(String, "--:--");
+            else
+                sprintf(String, "%02u:%02u", (unsigned)((gSubMenuSelection - 1) * 5 / 60), (unsigned)((gSubMenuSelection - 1) * 5 % 60));
+            break;
+
+        case MENU_SRV_WATCH:
+            strcpy(String, gSurvivalWatchNames[gSubMenuSelection]);
+            break;
+
+        case MENU_SRV_REPLY:
+            strcpy(String, gSubMenu_OFF_ON[gSubMenuSelection]);
             break;
 
         case MENU_SRV_LIMITS:

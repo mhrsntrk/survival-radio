@@ -145,6 +145,7 @@ enable_feature(ENABLE_SURVIVAL
     app/survival.c
     app/survival_country.c
     app/survival_manual.c
+    app/survival_team.c
     app/survival_tools.c
     ui/survival.c
 )

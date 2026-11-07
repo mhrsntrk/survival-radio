@@ -38,6 +38,9 @@
 #include "settings.h"
 #include "ui/status.h"
 #include "ui/ui.h"
+#ifdef ENABLE_SURVIVAL
+    #include "app/survival.h"
+#endif
 
 FUNCTION_Type_t gCurrentFunction;
 
@@ -192,6 +195,9 @@ void FUNCTION_Transmit()
 
     GUI_DisplayScreen();
 
+#ifdef ENABLE_SURVIVAL
+    SURVIVAL_TeamRxOff();   // the FSK receiver would hold the modem while sending
+#endif
     RADIO_SetTxParameters();
 
     // turn the RED LED on

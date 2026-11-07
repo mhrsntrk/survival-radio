@@ -285,7 +285,10 @@ void UI_DisplayMain(void)
     const char *hint = VfoStateText(VfoState[vfo]);
     if (hint == NULL) {
         static char wait[20];
-        if (SURVIVAL_BeaconActive())
+        if (SURVIVAL_TeamTalker()) {   // the last ID packet: who talked
+            sprintf(wait, "TALKED: %s", SURVIVAL_TeamTalker());
+            hint = wait;
+        } else if (SURVIVAL_BeaconActive())
             hint = "SOS BEACON ON F+1";
         else if (gEeprom.KEY_LOCK)
             hint = "HOLD F:UNLOCK";

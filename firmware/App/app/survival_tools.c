@@ -32,7 +32,7 @@
 #include "ui/helper.h"
 #include "ui/ui.h"
 
-enum { TOOL_NONE, TOOL_BEACON, TOOL_METER, TOOL_STATUS };
+enum { TOOL_NONE, TOOL_BEACON, TOOL_METER, TOOL_STATUS, TOOL_TEAM };
 
 static uint8_t sTool;
 
@@ -206,7 +206,10 @@ uint8_t SURVIVAL_ListenWaitMin(void)
     if (l == 0 || l >= SURV_LISTEN_COUNT)
         return 0;
     const uint32_t every = LISTEN_EVERY[l] * 60u;
-    const uint32_t pos   = sListen_s % every;
+    // with the clock set the windows open on the hour (and half hour), the same on
+    // every radio; without it they count from when the schedule was chosen
+    const uint16_t clock = SURVIVAL_ClockMin();
+    const uint32_t pos   = (clock < 1440) ? (clock * 60u) % every : sListen_s % every;
     if (pos < LISTEN_ON[l] * 60u)
         return 0;
     return (every - pos + 59) / 60;
@@ -218,8 +221,11 @@ static void ListenTick1s(void)
     if (l == 0 || l >= SURV_LISTEN_COUNT)
         return;
     sListen_s++;
-    if (sListen_s % (LISTEN_EVERY[l] * 60u) == 0)   // a window opens: wake and tell
+    static uint8_t wasWaiting;
+    const uint8_t waiting = SURVIVAL_ListenWaitMin() != 0;
+    if (wasWaiting && !waiting)   // a window opens: wake and tell
         gBeepToPlay = BEEP_880HZ_60MS_DOUBLE_BEEP;
+    wasWaiting = waiting;
 
     if (SURVIVAL_ListenWaitMin() == 0 || sBeaconOn)
         return;
@@ -293,12 +299,14 @@ void SURVIVAL_ToolTick10ms(void)
             gFlagPrepareTX = true;
     }
     BeaconTick10ms();
+    SURVIVAL_TeamTick10ms();
     if (sTool == TOOL_METER && gScreenToDisplay == DISPLAY_SCANNER)
         MeterTick10ms();
 
     if (++ticks >= 100) {
         ticks = 0;
         BeaconTick1s();
+        SURVIVAL_TeamTick1s();
         ListenTick1s();
         ReserveTick1s();
         if (sTool && gScreenToDisplay == DISPLAY_SCANNER)
@@ -318,6 +326,7 @@ static void Open(uint8_t tool)
 void SURVIVAL_ShowBeacon(void) { Open(TOOL_BEACON); }
 void SURVIVAL_ShowMeter(void)  { Open(TOOL_METER); }
 void SURVIVAL_ShowStatus(void) { Open(TOOL_STATUS); }
+void SURVIVAL_ShowTeam(void)   { SURVIVAL_TeamOpen(); Open(TOOL_TEAM); }
 
 bool SURVIVAL_ToolActive(void)
 {
@@ -326,7 +335,7 @@ bool SURVIVAL_ToolActive(void)
 
 const char *SURVIVAL_ToolTitle(void)
 {
-    static const char *const TITLE[] = {"", "SOS BEACON", "SIGNAL METER", "STATUS"};
+    static const char *const TITLE[] = {"", "SOS BEACON", "SIGNAL METER", "STATUS", "TEAM"};
     return TITLE[sTool];
 }
 
@@ -346,13 +355,18 @@ void SURVIVAL_ToolKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
     if (bKeyHeld || bKeyPressed)   // act on release
         return;
 
-    if (Key == KEY_EXIT) {
+    if (Key == KEY_EXIT && sTool != TOOL_TEAM) {
         if (sTool == TOOL_BEACON && sBeaconOn) {
             SURVIVAL_BeaconStop();
             gUpdateDisplay = true;
             return;   // a second EXIT leaves
         }
         SURVIVAL_ToolClose();
+        return;
+    }
+
+    if (sTool == TOOL_TEAM) {   // EXIT is the team screen's own (it leaves sub views first)
+        SURVIVAL_TeamKeys(Key);
         return;
     }
 
@@ -401,6 +415,10 @@ void SURVIVAL_ToolDisplay(void)
 
     UI_DisplayClear();
     switch (sTool) {
+        case TOOL_TEAM:
+            SURVIVAL_TeamDisplay();
+            break;
+
         case TOOL_BEACON:
             ChannelLine(s);
             Row(s, 0, true);

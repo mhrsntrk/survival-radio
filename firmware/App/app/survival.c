@@ -63,7 +63,11 @@ typedef struct {
     uint32_t customEnd;
     uint32_t skip[SURV_SKIP_N];
     uint8_t  defaultsRev;   // new defaults given to radios set up before them
-    uint8_t  reserved[5];
+    uint8_t  team;          // team code 1..50 (CTCSS tone on PMR, packet filter), 0/0xFF off
+    uint8_t  name;          // team name index, 0xFF: from the radio's calibration
+    uint8_t  teamFlags;     // bit 0 clear: no automatic answer to checks
+    uint8_t  watch;         // watch interval index
+    uint8_t  reserved[1];
     uint16_t crc;
 } SurvRecord_t;
 
@@ -636,6 +640,7 @@ void SURVIVAL_Init(void)
     const bool known = LoadRecord();
 
     BackupCalibration();
+    SURVIVAL_TeamInit();
 
     // the priority channel is marked with the (otherwise unused) scan list 1 bit
     for (uint8_t c = 0; IS_MR_CHANNEL(c); c++) {
@@ -735,6 +740,78 @@ bool SURVIVAL_TxAllowed(uint32_t frequency)
 bool SURVIVAL_TxCapped(uint32_t frequency)
 {
     return !(gSurvivalFlags & SURV_F_NO_LIMITS) && frequency >= PMR_LOWER && frequency < PMR_UPPER;
+}
+
+// ---------------------------------------------------------------- team settings
+uint8_t SURVIVAL_Team(void)
+{
+    return (sRec.team >= 1 && sRec.team <= SURV_TEAM_MAX) ? sRec.team : 0;
+}
+
+void SURVIVAL_SetTeam(uint8_t t)
+{
+    sRec.team = (t <= SURV_TEAM_MAX) ? t : 0;
+    SaveRecord();
+    gFlagReconfigureVfos = true;   // the PMR channels take the tone, the FSK receiver goes on
+}
+
+uint8_t SURVIVAL_TeamName(void)
+{
+    if (sRec.name < SURV_NAME_COUNT)
+        return sRec.name;
+    // not chosen yet: a letter from the radio's own calibration, so two radios differ
+    uint8_t  buf[32];
+    uint16_t h = 0;
+    for (uint16_t ofs = 0; ofs < 512; ofs += sizeof(buf)) {
+        PY25Q16_ReadBuffer(0x010000 + ofs, buf, sizeof(buf));
+        for (uint8_t i = 0; i < sizeof(buf); i++)
+            h = (uint16_t)(h * 31u + buf[i]);
+    }
+    sRec.name = h % 26;   // ALPHA..ZULU
+    SaveRecord();
+    return sRec.name;
+}
+
+void SURVIVAL_SetTeamName(uint8_t n)
+{
+    sRec.name = (n < SURV_NAME_COUNT) ? n : 0;
+    SaveRecord();
+}
+
+bool SURVIVAL_TeamAutoReply(void)
+{
+    return sRec.teamFlags & 1u;   // 0xFF (never set): on
+}
+
+void SURVIVAL_SetTeamAutoReply(bool on)
+{
+    sRec.teamFlags = on ? (sRec.teamFlags | 1u) : (sRec.teamFlags & ~1u);
+    SaveRecord();
+}
+
+uint8_t SURVIVAL_TeamWatch(void)
+{
+    return (sRec.watch < SURV_WATCH_COUNT) ? sRec.watch : 0;
+}
+
+void SURVIVAL_SetTeamWatch(uint8_t w)
+{
+    sRec.watch = (w < SURV_WATCH_COUNT) ? w : 0;
+    SaveRecord();
+}
+
+// PMR channels carry the team tone (CTCSS) on receive and send: other users of the
+// channel stay silent, team radios hear each other
+void SURVIVAL_TeamApply(VFO_Info_t *pVfo)
+{
+    const uint8_t t  = SURVIVAL_Team();
+    const uint8_t ch = pVfo->CHANNEL_SAVE;
+    if (!t || !IS_MR_CHANNEL(ch) || FindGroup(ch) != SURV_MODE_PMR)
+        return;
+    pVfo->freq_config_RX.CodeType = CODE_TYPE_CONTINUOUS_TONE;
+    pVfo->freq_config_RX.Code     = t - 1;
+    pVfo->freq_config_TX.CodeType = CODE_TYPE_CONTINUOUS_TONE;
+    pVfo->freq_config_TX.Code     = t - 1;
 }
 
 uint8_t SURVIVAL_ListenWindow(void)

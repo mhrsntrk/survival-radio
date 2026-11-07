@@ -25,7 +25,20 @@ and on [BMKs Survival Radio](https://github.com/melihkarakelle/bmks-survival-rad
   30 minutes, with the flashlight on SOS. For life-threatening emergencies only.
 - **Signal meter** (`F+2`): signal strength in dBm with a bar, peak hold and a beep whose pitch
   follows the signal. Turn around slowly to find the direction of a person or a 121.5 MHz beacon.
-- **Status** (`F+3`): battery percent and hours left while listening, with Eco and with FM.
+- **Team** (`F+3`, *Menu > Team / Name*): radios with the same team code hear only each other
+  on PMR (the code is a CTCSS tone) and talk to each other in short data bursts:
+  - **messages**: 12 preset messages (*COME TO ME*, *NEED HELP*, *I AM LOST*, ...) that reach
+    the others even when a voice would not be understood;
+  - **check**: `*` asks who hears you; team radios answer by themselves with their name, how
+    strong your signal reached them and their battery;
+  - **who talked**: after PTT the others see your name;
+  - **watch** (*Menu > Adv > Watch*): a check every 10-60 minutes, with an alarm when a partner
+    stops answering.
+- **Clock** (*Menu > Clock*): set once after switching on (or copied from a team partner); listen
+  windows then open on the hour on every radio.
+- **Status** (*Menu > Status*): battery percent and hours left while listening, with Eco and
+  with FM. Below 20 % the radio goes into **battery reserve** (Eco and listen windows).
+- **Hands free** (*Menu > Adv > VOX*) and a **roger beep** at the end of each call.
 - **Listen windows** (*Menu > Listen*): the receiver sleeps and wakes for 5 or 10 minutes every
   30 or 60 minutes; agree the times with your group.
 - **Simple mode** (*Menu > Simple*): only PMR, LOCAL, FM and FAV, and the key lock also locks PTT.
@@ -38,11 +51,12 @@ and on [BMKs Survival Radio](https://github.com/melihkarakelle/bmks-survival-rad
   switches over when someone talks; with Eco the watch runs in short bursts to save battery.
 - **Safe transmit**: sending only on the bands you allow. Air band, FM broadcast, military air,
   406 MHz beacons, marine 70/75/76, AIS and GNSS bands are always blocked.
-- **Built-in manual** (`F+6`): 35 topics, from the keys to MAYDAY calls, SOS and alpine distress
+- **Built-in manual** (`F+6`): 38 topics, from the keys to MAYDAY calls, SOS and alpine distress
   signals, helicopter signals, water, direction finding, cold and heat, and first aid.
 - **Flashlight**: on, blink, strobe and SOS with the side key.
 - **Settings that survive power cuts**: the survival settings are kept in a CRC-checked record that
   alternates between two flash sectors; channel table updates keep FAV, the skip list and settings.
+  The first start also copies the radio's factory calibration to a spare flash sector.
 
 ## Keys
 
@@ -58,7 +72,7 @@ and on [BMKs Survival Radio](https://github.com/melihkarakelle/bmks-survival-rad
 | `SIDE2` | FM radio on / off | scan |
 | `PTT` | talk, only where sending is allowed | |
 
-**F shortcuts:** `F+1` SOS beacon, `F+2` signal meter, `F+3` status, `F+4` heard list,
+**F shortcuts:** `F+1` SOS beacon, `F+2` signal meter, `F+3` team, `F+4` heard list,
 `F+5` priority, `F+6` manual, `F+7` favourite, `F+8` skip in scan, `F+9` country page,
 `F+0` FM radio, `F+UP/DOWN` squelch, `F+*` scan.
 
@@ -73,7 +87,8 @@ and on [BMKs Survival Radio](https://github.com/melihkarakelle/bmks-survival-rad
 
 ## Install
 
-Use `builds/survival-radio.bin` or build it yourself (below).
+Use `survival-radio.bin` from the [latest release](../../releases/latest), `builds/survival-radio.bin`,
+or build it yourself (below).
 
 1. **Back up the radio first**, with the radio switched on normally:
    ```
@@ -114,6 +129,8 @@ certified safety or distress device: carry a proper one (PLB, marine VHF, phone)
 
 ## Build from source
 
+GitHub Actions builds every push (artifact *survival-radio*); a tag `v*` publishes a release.
+
 ```
 SURVIVAL_VERSION=v1.0 tools/build.sh        # Docker, output builds/survival-radio.bin
 ```
@@ -128,7 +145,7 @@ in [`firmware/App/app/survival_country.c`](firmware/App/app/survival_country.c).
 | Path | |
 |---|---|
 | `firmware/` | firmware source (F4HWN V3 v4.3.2 tree with the survival edition) |
-| `firmware/App/app/survival*.c` | channel groups, country presets, tools, manual |
+| `firmware/App/app/survival*.c` | channel groups, country presets, tools, team, manual |
 | `tools/build.sh` | Docker build |
 | `tools/k5v3flash.py` | bootloader flasher (UVTools2 protocol) |
 | `tools/k5link.py` | version check and EEPROM dump |
@@ -143,6 +160,8 @@ in [`firmware/App/app/survival_country.c`](firmware/App/app/survival_country.c).
   [egzumer](https://github.com/egzumer/uv-k5-firmware-custom) and [armel / F4HWN](https://github.com/armel/uv-k5-firmware-custom)
   for the firmware this is built on, [muzkr and armel](https://github.com/armel/uv-k1-k5v3-firmware-custom)
   for the PY32F071 port, and armel's [UVTools2](https://armel.github.io/uvtools2/).
+- [joaquimorg](https://github.com/joaquimorg/uv-k5-firmware-custom) for the Messenger, whose FSK
+  set-up the team packets follow.
 - [BMKs Survival Radio](https://github.com/melihkarakelle/bmks-survival-radio) by Melih Karakelle,
   the survival edition this firmware grew from.
 

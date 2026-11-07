@@ -430,6 +430,10 @@ void RADIO_ConfigureChannel(const unsigned int VFO, const unsigned int configure
 
     pVfo->Compander = att.compander;
 
+#ifdef ENABLE_SURVIVAL
+    SURVIVAL_TeamApply(pVfo);   // the team tone on the PMR channels
+#endif
+
     #ifdef ENABLE_FEAT_F4HWN_RESCUE_OPS
     if(gRemoveOffset)
     {
@@ -884,6 +888,11 @@ void RADIO_SetupRegisters(bool switchToForeground)
     InterruptMask |= BK4819_REG_3F_DTMF_5TONE_FOUND;
 
     RADIO_SetupAGC(gRxVfo->Modulation == MODULATION_AM, false);
+
+#ifdef ENABLE_SURVIVAL
+    SURVIVAL_TeamRxOn();   // team packets are heard on the channel in use
+    InterruptMask |= SURVIVAL_TeamIrqMask();
+#endif
 
     // enable/disable BK4819 selected interrupts
     BK4819_WriteRegister(BK4819_REG_3F, InterruptMask);

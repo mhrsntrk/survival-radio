@@ -121,6 +121,38 @@ void        SURVIVAL_SetListen(uint8_t l);
 uint8_t     SURVIVAL_ListenWaitMin(void);     // minutes to the next window, 0 = open
 void        SURVIVAL_ListenRestart(void);
 void        SURVIVAL_SetSimple(bool on);
+
+// team (survival_team.c): code, name, messages, checks, clock
+#define SURV_TEAM_MAX    50   // one per CTCSS tone
+#define SURV_NAME_COUNT  30
+#define SURV_WATCH_COUNT 4
+extern const char *const gSurvivalNames[SURV_NAME_COUNT];
+extern const char *const gSurvivalWatchNames[SURV_WATCH_COUNT];
+uint8_t     SURVIVAL_Team(void);              // 0 = off
+void        SURVIVAL_SetTeam(uint8_t t);
+uint8_t     SURVIVAL_TeamName(void);
+void        SURVIVAL_SetTeamName(uint8_t n);
+bool        SURVIVAL_TeamAutoReply(void);
+void        SURVIVAL_SetTeamAutoReply(bool on);
+uint8_t     SURVIVAL_TeamWatch(void);
+void        SURVIVAL_SetTeamWatch(uint8_t w);
+struct VFO_Info_t;
+void        SURVIVAL_TeamApply(struct VFO_Info_t *pVfo);
+void        SURVIVAL_TeamInit(void);
+void        SURVIVAL_TeamRxOn(void);
+void        SURVIVAL_TeamRxOff(void);
+uint16_t    SURVIVAL_TeamIrqMask(void);
+void        SURVIVAL_TeamIrq(uint16_t bits);
+void        SURVIVAL_TeamSendId(void);
+void        SURVIVAL_TeamTick10ms(void);
+void        SURVIVAL_TeamTick1s(void);
+void        SURVIVAL_TeamOpen(void);
+void        SURVIVAL_TeamKeys(KEY_Code_t Key);
+void        SURVIVAL_TeamDisplay(void);
+const char *SURVIVAL_TeamTalker(void);
+uint16_t    SURVIVAL_ClockMin(void);          // 0xFFFF: not set
+void        SURVIVAL_SetClockMin(uint16_t min);
+void        SURVIVAL_ShowTeam(void);          // F+3
 void        SURVIVAL_Message(const char *line1, const char *line2);   // 1.5 s feedback screen
 bool        SURVIVAL_Reserve(void);           // battery reserve mode is on
 

@@ -178,19 +178,25 @@ enum
     MENU_SRV_LIMITS,    // SAFE LIMITS: PMR power cap, CB listen only; OFF = emergency
     MENU_SRV_SIMPLE,    // simple mode
     MENU_SRV_LISTEN,    // listen windows
+    MENU_SRV_TEAM,      // team code
+    MENU_SRV_NAME,      // team name
+    MENU_SRV_CLOCK,     // clock (RAM only)
+    MENU_SRV_WATCH,     // lost-partner watch
+    MENU_SRV_REPLY,     // automatic answer to checks
     MENU_SRV_HEARD,     // actions: M runs them, no value to edit
     MENU_SRV_SKIP,
     MENU_SRV_FAV,
     MENU_SRV_PRIO,
     MENU_SRV_RADIO,
     MENU_SRV_HELP,
+    MENU_SRV_STATUS,
     MENU_SRV_ADV,
 #endif
 };
 
 #ifdef ENABLE_SURVIVAL
     // MenuList starts with the Basic level; Adv is its last item, Advanced follows
-    #define SURV_BASIC_COUNT 15
+    #define SURV_BASIC_COUNT 19
     #define IS_SURV_ACTION(id) ((id) >= MENU_SRV_HEARD && (id) <= MENU_SRV_ADV)
     extern uint8_t gMenuLevel;      // 0 Basic, 1 Advanced
 #endif
