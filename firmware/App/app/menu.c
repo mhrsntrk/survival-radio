@@ -143,7 +143,12 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
             break;
 
         case MENU_SRV_LIMITS:
+        case MENU_SRV_SIMPLE:
             *pMax = 1;
+            break;
+
+        case MENU_SRV_LISTEN:
+            *pMax = SURV_LISTEN_COUNT - 1;
             break;
 #endif
 
@@ -580,6 +585,14 @@ void MENU_AcceptSetting(void)
 
         case MENU_SRV_COUNTRY:
             SURVIVAL_SetCountry(gSubMenuSelection);
+            return;
+
+        case MENU_SRV_SIMPLE:
+            SURVIVAL_SetSimple(gSubMenuSelection);
+            return;
+
+        case MENU_SRV_LISTEN:
+            SURVIVAL_SetListen(gSubMenuSelection);
             return;
 
         case MENU_SRV_LIMITS:
@@ -1232,6 +1245,14 @@ void MENU_ShowCurrentSetting(void)
 
         case MENU_SRV_LIMITS:
             gSubMenuSelection = !(gSurvivalFlags & SURV_F_NO_LIMITS);
+            break;
+
+        case MENU_SRV_SIMPLE:
+            gSubMenuSelection = !!(gSurvivalFlags & SURV_F_SIMPLE);
+            break;
+
+        case MENU_SRV_LISTEN:
+            gSubMenuSelection = SURVIVAL_ListenWindow();
             break;
 
         case MENU_SRV_TX_PMR ... MENU_SRV_TX_ALL:

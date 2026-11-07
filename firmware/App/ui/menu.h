@@ -176,6 +176,8 @@ enum
     MENU_SRV_ECO,
     MENU_SRV_COUNTRY,   // country presets: LOCAL group, CB plan, numbers page
     MENU_SRV_LIMITS,    // SAFE LIMITS: PMR power cap, CB listen only; OFF = emergency
+    MENU_SRV_SIMPLE,    // simple mode
+    MENU_SRV_LISTEN,    // listen windows
     MENU_SRV_HEARD,     // actions: M runs them, no value to edit
     MENU_SRV_SKIP,
     MENU_SRV_FAV,
@@ -188,7 +190,7 @@ enum
 
 #ifdef ENABLE_SURVIVAL
     // MenuList starts with the Basic level; Adv is its last item, Advanced follows
-    #define SURV_BASIC_COUNT 13
+    #define SURV_BASIC_COUNT 15
     #define IS_SURV_ACTION(id) ((id) >= MENU_SRV_HEARD && (id) <= MENU_SRV_ADV)
     extern uint8_t gMenuLevel;      // 0 Basic, 1 Advanced
 #endif

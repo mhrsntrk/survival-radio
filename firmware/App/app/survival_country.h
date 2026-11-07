@@ -36,7 +36,7 @@ typedef struct {
     uint8_t                cb;
     uint8_t                localCount;
     const SurvivalLocal_t *local;
-    const char            *numbers;   // '\0' separated rows, "" ends
+    const char            *numbers;   // country page rows, "\0" separated, "" ends
 } SurvivalCountry_t;
 
 extern const SurvivalCountry_t gSurvivalCountries[];

@@ -1,7 +1,9 @@
 # Survival Radio manual (F+6 on the radio)
-# Built into the firmware by tools/manual2c.py -> firmware/app/survival_manual.c
+# Built into the firmware by tools/manual2c.py -> firmware/App/app/survival_manual.c
 # "== TITLE" starts a topic (title max 12 chars), every other line is one screen row (max 18 chars).
-# The first two topics are also pages 2 and 3 of the F key help. Lines starting with '#' are comments.
+# The first three topics are also the pages of the F key help. Lines starting with '#' are comments.
+# "== @COUNTRY" is a placeholder: the radio shows the selected country there (Menu>Region),
+# with its numbers, local channels and news station (firmware/App/app/survival_country.c).
 
 == KEYS
 M>Next group
@@ -25,27 +27,146 @@ HOLD SIDE2>Scan
 
 == F SHORTCUTS
 Tap F, then a key:
-0>FM radio
-4>Heard list
-5>Priority
-6>Help/Manual
-7>Favorite
-8>Skip in scan
-UP/DN>Squelch
+# short rows: the F help shows them in two columns of 9 characters
+1>Beacon
+2>Meter
+3>Status
+4>Heard
+5>Prio
+6>Manual
+7>Fav
+8>Skip
+9>Country
+0>FM
+UP/DN>SQL
 *>Scan
-F again>Cancel
+
+== EMERGENCY
+Phone first: 112
+  works in all EU
+  on any network
+Even a short call
+  sends your GPS
+  (AML) in most
+  countries
+No signal? Text
+  112 or go high
+Radio: listen
+  first, then call
+F+9: numbers and
+  channels of your
+  country
+
+== @COUNTRY
+
+== WHO HEARS
+PMR 8 and 7-7 /
+  8-16 (mountain)
+  hikers, groups
+MARINE ch16 and
+  coastguard
+  156.800 MHz
+CB ch 9 27.065
+  roads, trucks
+HAM 145.500 call
+AIR 121.500:
+  listen only
+Life at risk:
+  Menu>Limits OFF
+  allows more
+
+== MAYDAY CALL
+Life in danger:
+MAYDAY x3
+This is (name) x3
+MAYDAY (name)
+Where you are
+What happened
+Help you need
+How many people
+OVER, then listen
+Again every 2 min
+Urgent, no danger
+  to life:
+  PAN-PAN x3
+Safety warning:
+  SECURITE x3
+
+== SOS BEACON
+F+1>Beacon screen
+M>Start
+Morse SOS tone on
+  this channel,
+  10 s every 2 min
+  for 30 min, and
+  light SOS
+EXIT>Stop
+PTT stops it too
+Only when life
+  is at risk
+
+== SIGNAL METER
+F+2>Meter
+Big number: signal
+  in dBm, higher
+  (-60) = closer
+Turn slowly: the
+  loudest way is
+  the source
+Walk, check again
+M>Clear peak
+UP/DN>Tone on/off
+Finds a person or
+  a 121.5 beacon
+  (AIR, close)
 
 == GROUPS
 M tap steps groups
-PMR446 EU, 16 ch
-FRS US/CA, 22 ch
+PMR446 16 ch
+LOCAL your country
 MARINE VHF
 AIR 118-137 AM
 HAM 2m/70cm calls
-CB 40 ch, 27 MHz
+CB 27 MHz
 FM RADIO broadcast
 CUSTOM own range
 FAV your channels
+Simple mode:
+  PMR, LOCAL, FM,
+  FAV only
+
+== SENDING
+PTT sends FM only
+  on allowed bands
+PMR446: on
+MAR, HAM, CB:
+  Adv>TxMAR/TxHAM/
+  TxCB (licence)
+TxAll>Any other
+Always blocked:
+  88-137, 225-400,
+  406 MHz beacons,
+  marine 70/75/76,
+  AIS, GPS bands
+The UV-K5 is not
+  type approved:
+  for emergencies
+
+== SAFE LIMITS
+Menu>Limits ON:
+PMR sent at low
+  power, narrow
+  (CAP on screen)
+CB listen only:
+  27 MHz sends
+  noise into air
+  and marine bands
+Life at risk?
+  Limits OFF:
+  full power,
+  CB allowed
+Set ON again
+  afterwards
 
 == SCAN
 *>Start or stop
@@ -82,7 +203,9 @@ M to FAV group:
   use, scan them
 Menu>Adv>Rename
   gives a name
-58 places
+30 places, kept
+  when the country
+  changes
 
 == PRIORITY
 F+5>This channel
@@ -103,6 +226,10 @@ EXIT>Back
 Also Menu>Heard
 
 == FM RADIO
+News in a crisis:
+  the public radio
+  of your country
+  (F+9)
 SIDE2/F+0>On, off
 UP/DN>Tune / saved
 *>Seek next
@@ -122,6 +249,8 @@ Listen only,
   sending blocked
 121.500 = air
   emergency
+123.100 = search
+  and rescue
 *>Scan the band
 0-9>Type a freq
 
@@ -134,21 +263,6 @@ Menu>Adv>Start,
 Sends only where
   TX is allowed
 
-== SENDING
-PTT sends FM only
-  on allowed bands
-PMR446: on
-FRS, MAR, HAM, CB:
-  Adv>TxFRS/MAR/
-  TxHAM/TxCB
-TxAll>Any other
-Always blocked:
-  88-137, 225-400,
-  406.0-406.1 MHz,
-  marine ch 70
-Licence? Check
-  your local law.
-
 == SQUELCH
 Hides noise when
   nobody talks
@@ -158,6 +272,41 @@ F+UP/DN or
   strong signals
 1-2 good for scan
 
+== COUNTRY
+Menu>Region:
+  your country
+Sets LOCAL group,
+  CB plan and the
+  F+9 page
+FAV stays
+
+== BATTERY
+F+3>Percent and
+  hours left
+Menu>Eco ON:
+  saves power,
+  short light
+Menu>Listen:
+  radio sleeps,
+  wakes 5 or 10
+  min every 30/60
+LOW power is fine
+  for near calls
+Cold drains it:
+  keep it warm
+  inside clothes
+
+== KEY LOCK
+HOLD F>Lock keys
+HOLD F>Unlock
+PTT locked too:
+  no pocket calls
+  (Adv>LockTx)
+Side keys still
+  work
+Menu>Adv>Lock:
+  auto lock time
+
 == MENU
 HOLD M>Open
 UP/DN>Choose
@@ -166,55 +315,13 @@ EXIT>Cancel, back
 Adv>More settings
 Help>This manual
 
-== BATTERY
-Top right: volts
-  and 3 bars
-Menu>Eco ON:
-  saves power,
-  short light
-LOW power is fine
-  for near calls
-
-== KEY LOCK
-HOLD F>Lock keys
-HOLD F>Unlock
-Side keys still
-  work
-Menu>Adv>Lock:
-  auto lock time
-
 == RESET
 Menu>Adv>Reset
   ALL: factory
   channels again
 Clears FAV, skip
-  list, settings
-
-== EMERGENCY
-Life at risk:
-  any channel OK
-MARINE ch16
-  156.800 distress
-CB ch 9 27.065
-PMR ch 8 (some
-  areas)
-HAM 145.500 EU
-  146.520 US
-AIR 121.500 listen
-Listen first!
-
-== MAYDAY CALL
-MAYDAY x3
-This is (name) x3
-MAYDAY (name)
-Where you are
-What happened
-Help you need
-How many people
-OVER, then listen
-Again every 2 min
-Urgent, no danger
-  to life: PAN-PAN
+  list, settings,
+  asks country
 
 == RADIO TIPS
 Go high, clear
@@ -244,11 +351,28 @@ Yankee Zulu
 == SOS SIGNALS
 Morse SOS:
   ... --- ...
+Mountains: 6 a
+  minute (whistle,
+  light), pause
+  1 min, repeat
+Answer: 3 a min
 3 of anything =
   help: 3 fires,
   whistles, lights
 SIDE1 x4>SOS light
-Ground signs:
+
+== HELICOPTER
+Both arms up (Y):
+  YES, need help
+One up, one down
+  (N): NO help
+Mirror or screen:
+  flash at it
+Clear the landing
+  area, stay put
+Ground signs at
+  least 3 m, dark
+  on light:
   V need help
   X need medic
   -> went this way
@@ -270,29 +394,60 @@ Boil 1 min (3 min
 Or filter + tabs
 Clear running
   water is better
-Need 2-3 L a day
+Need 2-3 L a day,
+  more in heat
 
 == DIRECTION
-Sun rises east,
-  sets west
-Noon sun: south
-  (north half of
-  the world)
-North star: follow
-  the 2 end stars
-  of Big Dipper
-South half: long
-  axis of the
-  Southern Cross
+Sun: east at
+  sunrise, west
+  at sunset
+Halfway between
+  them it is due
+  south (Europe)
+Shadow stick:
+  mark the tip,
+  wait 15 min,
+  mark again:
+  1st to 2nd mark
+  points east
+North star: 5x
+  the gap of the
+  Big Dipper's 2
+  end stars, or
+  from the middle
+  of Cassiopeia W
+
+== COLD, HEAT
+Cold: off the
+  ground, dry,
+  wind shelter
+Shivering stops,
+  confused: warm
+  the body core,
+  sweet drinks if
+  awake, no rub
+Heat: shade, rest,
+  water, cool the
+  neck and armpits
+Hot dry skin and
+  confused: 112
 
 == FIRST AID
 Check danger first
-Bleeding: press
-  hard, keep on
 Not breathing:
-  call help, CPR
-  30 push, 2 blow
-Keep them warm
-  and still
+  112, then CPR:
+  30 hard pushes,
+  5-6 cm deep,
+  100-120 a min,
+  2 breaths
+Bleeding: press
+  hard, keep on;
+  tourniquet only
+  as a last resort
+Breathing, out:
+  on the side
+  (recovery pos.)
 Breaks: do not
   move, support
+Keep them warm
+  and still

@@ -123,8 +123,9 @@ bool UI_DisplayHelp(bool fm)
     }
 
     UI_DisplayClear();
-    for (uint8_t row = 0; row < 7 && *text; row++) {
-        UI_PrintStringSmallNormal(text, 0, 0, row);
+    // up to 7 rows; a longer page (F shortcuts) continues in a second column
+    for (uint8_t i = 0; i < 14 && *text; i++) {
+        UI_PrintStringSmallNormal(text, (i < 7) ? 0 : 64, 0, i % 7);
         text += strlen(text) + 1;
     }
     ST7565_BlitFullScreen();
@@ -283,8 +284,15 @@ void UI_DisplayMain(void)
     // R6: the keys that matter now
     const char *hint = VfoStateText(VfoState[vfo]);
     if (hint == NULL) {
-        if (gEeprom.KEY_LOCK)
+        static char wait[20];
+        if (SURVIVAL_BeaconActive())
+            hint = "SOS BEACON ON F+1";
+        else if (gEeprom.KEY_LOCK)
             hint = "HOLD F:UNLOCK";
+        else if (SURVIVAL_ListenWaitMin()) {
+            sprintf(wait, "SLEEP, LISTEN %uM", SURVIVAL_ListenWaitMin());
+            hint = wait;
+        }
         else if (tx)
             hint = "RELEASE PTT:STOP";
         else if (gScanStateDir != SCAN_OFF)

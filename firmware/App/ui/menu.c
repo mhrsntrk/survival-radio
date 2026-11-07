@@ -52,6 +52,7 @@ const t_menu_item MenuList[] =
 //   text,          menu ID              title
     // Basic
     {"Group",       MENU_SRV_GROUP,      "USE GROUP"  },
+    {"Simple",      MENU_SRV_SIMPLE,     "SIMPLE MODE"},
     {"Region",      MENU_SRV_COUNTRY,    "COUNTRY"    },
     {"Heard",       MENU_SRV_HEARD,      "LAST HEARD" },
     {"Skip",        MENU_SRV_SKIP,       "SKIP LIST"  },
@@ -61,6 +62,7 @@ const t_menu_item MenuList[] =
     {"Power",       MENU_TXP,            "TX POWER"   },
     {"Limits",      MENU_SRV_LIMITS,     "SAFE LIMITS"},
     {"Eco",         MENU_SRV_ECO,        "SAVE POWER" },
+    {"Listen",      MENU_SRV_LISTEN,     "LISTEN TIME"},
     {"Radio",       MENU_SRV_RADIO,      "FM RADIO"   },
     {"Help",        MENU_SRV_HELP,       "MANUAL"     },
     {"Adv",         MENU_SRV_ADV,        "ADVANCED"   },   // SURV_BASIC_COUNT items up to here
@@ -737,6 +739,14 @@ void UI_DisplayMenu(void)
 
         case MENU_SRV_COUNTRY:
             strcpy(String, SURVIVAL_CountryName(gSubMenuSelection));
+            break;
+
+        case MENU_SRV_SIMPLE:
+            strcpy(String, gSubMenu_OFF_ON[gSubMenuSelection]);
+            break;
+
+        case MENU_SRV_LISTEN:
+            strcpy(String, gSurvivalListenNames[gSubMenuSelection]);
             break;
 
         case MENU_SRV_LIMITS:

@@ -9,7 +9,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "design" / "manual.txt"
-OUT = ROOT / "firmware" / "app" / "survival_manual.c"
+OUT = ROOT / "firmware" / "App" / "app" / "survival_manual.c"
 
 TITLE_MAX = 12   # 7 px bold characters left of the topic number
 ROW_MAX = 18     # 7 px small characters across 128 px

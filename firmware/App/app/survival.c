@@ -697,6 +697,29 @@ bool SURVIVAL_TxCapped(uint32_t frequency)
     return !(gSurvivalFlags & SURV_F_NO_LIMITS) && frequency >= PMR_LOWER && frequency < PMR_UPPER;
 }
 
+uint8_t SURVIVAL_ListenWindow(void)
+{
+    return (sRec.listen < SURV_LISTEN_COUNT) ? sRec.listen : 0;
+}
+
+void SURVIVAL_SetListen(uint8_t l)
+{
+    sRec.listen = (l < SURV_LISTEN_COUNT) ? l : 0;
+    SURVIVAL_ListenRestart();   // the first window starts now
+    SaveRecord();
+}
+
+// simple mode: M steps PMR, LOCAL, FM and FAV only, key lock also locks PTT
+void SURVIVAL_SetSimple(bool on)
+{
+    gSurvivalFlags = on ? (gSurvivalFlags | SURV_F_SIMPLE) : (gSurvivalFlags & ~SURV_F_SIMPLE);
+    if (on && !gSetting_set_lck) {
+        gSetting_set_lck = true;
+        SETTINGS_SaveSettings();
+    }
+    SaveRecord();
+}
+
 // factory reset: both records go, the next start sets everything up again
 void SURVIVAL_EraseMarker(void)
 {
@@ -828,9 +851,16 @@ void SURVIVAL_ToggleFm(void)
 
 void ACTION_SurvivalGroup(void)
 {
-    uint8_t mode = (SURVIVAL_GetMode() + 1) % SURV_MODE_COUNT;
-    while (mode < ARRAY_SIZE(GROUPS) && GroupCount(mode) == 0)   // skip empty groups
-        mode++;
+    uint8_t mode = SURVIVAL_GetMode();
+    for (uint8_t n = 0; n < SURV_MODE_COUNT; n++) {
+        mode = (mode + 1) % SURV_MODE_COUNT;
+        if (mode < ARRAY_SIZE(GROUPS) && GroupCount(mode) == 0)   // skip empty groups
+            continue;
+        if ((gSurvivalFlags & SURV_F_SIMPLE) && mode != SURV_MODE_PMR && mode != SURV_MODE_FRS &&
+            mode != SURV_MODE_FM && mode != SURV_MODE_FAV)
+            continue;   // simple mode: the few groups that matter
+        break;
+    }
     SURVIVAL_SetMode(mode);
 }
 
@@ -1187,10 +1217,15 @@ static const char *NextString(const char *p)
     return p + strlen(p) + 1;
 }
 
-static char sNumbersTitle[13];   // "ES NUMBERS": the last topic, rows from the country
+// "@COUNTRY" in the manual is a placeholder: its title is the country name and its
+// rows come from the country table (survival_country.c)
+static bool IsCountryTopic(const char *title)
+{
+    return title[0] == '@';
+}
 
-// title of topic n, NULL past the last one
-static const char *ManualTopic(uint8_t n)
+// title of topic n as stored (the placeholder is still "@COUNTRY"), NULL past the last one
+static const char *ManualTopicRaw(uint8_t n)
 {
     const char *p = gSurvivalManual;
     for (; *p; n--) {
@@ -1201,11 +1236,13 @@ static const char *ManualTopic(uint8_t n)
         while (*p);
         p++;   // the empty string after the rows
     }
-    if (n == 0) {
-        sprintf(sNumbersTitle, "%s NUMBERS", Country()->code);
-        return sNumbersTitle;
-    }
     return NULL;
+}
+
+static const char *ManualTopic(uint8_t n)
+{
+    const char *t = ManualTopicRaw(n);
+    return (t && IsCountryTopic(t)) ? Country()->name : t;
 }
 
 static uint8_t ManualCount(void)
@@ -1227,8 +1264,8 @@ static uint8_t RowCount(const char *row)
 // rows of topic n (after its title); the help pages show some topics too
 const char *SURVIVAL_ManualRows(uint8_t n)
 {
-    const char *title = ManualTopic(n);
-    if (title == sNumbersTitle)
+    const char *title = ManualTopicRaw(n);
+    if (IsCountryTopic(title))
         return Country()->numbers;
     return NextString(title);
 }
@@ -1291,6 +1328,20 @@ void SURVIVAL_ShowBootPrompt(void)
     // no key event yet: a display request would only be applied after the first key
     GUI_SelectNextDisplay(DISPLAY_SCANNER);
     gRequestDisplayScreen = DISPLAY_INVALID;
+}
+
+// F+9: straight to the country page (numbers, local channels, local notes)
+void SURVIVAL_ShowCountryPage(void)
+{
+    SURVIVAL_ShowManual();
+    for (uint8_t n = 0; ManualTopicRaw(n); n++) {
+        if (IsCountryTopic(ManualTopicRaw(n))) {
+            sManTopic  = n;
+            sManScroll = 0;
+            sManual    = MAN_TOPIC;
+            break;
+        }
+    }
 }
 
 void SURVIVAL_ShowManual(void)
@@ -1430,6 +1481,10 @@ bool SURVIVAL_DrawHeader(void)
         Header(HELP_TITLE[SURVIVAL_HelpPage()], SURVIVAL_HelpPage() + 1, 3);
         return true;
     }
+    if (SURVIVAL_ToolActive() && gScreenToDisplay == DISPLAY_SCANNER && !sMsgTimer) {
+        Header(SURVIVAL_ToolTitle(), 0, 0);
+        return true;
+    }
     if (sManual && gScreenToDisplay == DISPLAY_SCANNER && !sMsgTimer) {
         if (sManual == MAN_TOPIC)
             Header(ManualTopic(sManTopic), sManTopic + 1, ManualCount());
@@ -1486,6 +1541,8 @@ void SURVIVAL_ShowLog(void)
 {
     if (gScanStateDir != SCAN_OFF)
         CHFRSCANNER_StopHere();
+    if (SURVIVAL_ToolActive())
+        SURVIVAL_ToolClose();
     sSkipView             = false;
     sManual               = MAN_OFF;
     sLogCursor            = 0;
@@ -1530,6 +1587,11 @@ void SURVIVAL_LogKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld)
             sMsgTimer             = 0;
             gRequestDisplayScreen = DISPLAY_MAIN;
         }
+        return;
+    }
+
+    if (SURVIVAL_ToolActive()) {
+        SURVIVAL_ToolKeys(Key, bKeyPressed, bKeyHeld);
         return;
     }
 
@@ -1585,6 +1647,11 @@ void SURVIVAL_DisplayLog(void)
     char Name[16];
 
     UI_DisplayClear();
+
+    if (!sMsgTimer && SURVIVAL_ToolActive()) {
+        SURVIVAL_ToolDisplay();
+        return;
+    }
 
     if (!sMsgTimer && sManual) {
         DisplayManual();

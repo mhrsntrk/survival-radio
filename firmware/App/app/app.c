@@ -1442,6 +1442,9 @@ void APP_TimeSlice10ms(void)
         FlashlightTimeSlice();
     #endif
 #endif
+#ifdef ENABLE_SURVIVAL
+    SURVIVAL_ToolTick10ms();   // SOS beacon keying, signal meter, listen windows
+#endif
 
 #ifdef ENABLE_VOX
     if (gVoxResumeCountdown > 0)

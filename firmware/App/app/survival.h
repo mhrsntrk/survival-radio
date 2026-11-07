@@ -100,6 +100,26 @@ uint8_t     SURVIVAL_CountryCount(void);
 const char *SURVIVAL_CountryName(uint8_t country);
 const char *SURVIVAL_CountryRows(void);             // numbers page rows, '\0' separated, "" ends
 
+// tools on the info screen slot (survival_tools.c)
+void        SURVIVAL_ToolTick10ms(void);
+void        SURVIVAL_ShowBeacon(void);    // F+1
+void        SURVIVAL_ShowMeter(void);     // F+2
+void        SURVIVAL_ShowStatus(void);    // F+3
+bool        SURVIVAL_ToolActive(void);
+const char *SURVIVAL_ToolTitle(void);
+void        SURVIVAL_ToolKeys(KEY_Code_t Key, bool bKeyPressed, bool bKeyHeld);
+void        SURVIVAL_ToolDisplay(void);
+void        SURVIVAL_ToolClose(void);
+bool        SURVIVAL_BeaconActive(void);
+void        SURVIVAL_ShowCountryPage(void);   // F+9: the emergency page of the country
+#define SURV_LISTEN_COUNT 4
+extern const char *const gSurvivalListenNames[SURV_LISTEN_COUNT];
+uint8_t     SURVIVAL_ListenWindow(void);      // 0 = off
+void        SURVIVAL_SetListen(uint8_t l);
+uint8_t     SURVIVAL_ListenWaitMin(void);     // minutes to the next window, 0 = open
+void        SURVIVAL_ListenRestart(void);
+void        SURVIVAL_SetSimple(bool on);
+
 // FM radio with a background scan of one group on the BK4819
 void    SURVIVAL_FmStarted(void);
 void    SURVIVAL_FmStopped(void);

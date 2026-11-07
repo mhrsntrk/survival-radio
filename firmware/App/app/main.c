@@ -226,6 +226,25 @@ static void processFKeyFunction(const KEY_Code_t Key, const bool beep)
             break;
 #endif
 
+#ifdef ENABLE_SURVIVAL
+        case KEY_1:
+            gWasFKeyPressed = false;
+            SURVIVAL_ShowBeacon();
+            return;
+        case KEY_2:
+            gWasFKeyPressed = false;
+            SURVIVAL_ShowMeter();
+            return;
+        case KEY_3:
+            gWasFKeyPressed = false;
+            SURVIVAL_ShowStatus();
+            return;
+        case KEY_9:
+            gWasFKeyPressed = false;
+            SURVIVAL_ShowCountryPage();
+            return;
+#endif
+
         case KEY_4:
             gWasFKeyPressed          = false;
 #ifdef ENABLE_SURVIVAL
