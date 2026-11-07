@@ -137,6 +137,10 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
         case MENU_SRV_ECO:
             *pMax = 1;
             break;
+
+        case MENU_SRV_COUNTRY:
+            *pMax = SURVIVAL_CountryCount() - 1;
+            break;
 #endif
 
         case MENU_SQL:
@@ -570,6 +574,10 @@ void MENU_AcceptSetting(void)
 
         case MENU_SRV_ECO:
             SURVIVAL_SetEco(gSubMenuSelection);
+            return;
+
+        case MENU_SRV_COUNTRY:
+            SURVIVAL_SetCountry(gSubMenuSelection);
             return;
 
         case MENU_SRV_C_START:
@@ -1211,6 +1219,10 @@ void MENU_ShowCurrentSetting(void)
 
         case MENU_SRV_ECO:
             gSubMenuSelection = SURVIVAL_EcoOn();
+            break;
+
+        case MENU_SRV_COUNTRY:
+            gSubMenuSelection = gSurvivalCountry;
             break;
 
         case MENU_SRV_TX_PMR ... MENU_SRV_TX_ALL:
@@ -2128,6 +2140,9 @@ static void MENU_Key_MENU(const bool bKeyPressed, const bool bKeyHeld)
         if (UI_MENU_GetCurrentMenuId() == MENU_RESET  ||
             UI_MENU_GetCurrentMenuId() == MENU_MEM_CH ||
             UI_MENU_GetCurrentMenuId() == MENU_DEL_CH ||
+#ifdef ENABLE_SURVIVAL
+            UI_MENU_GetCurrentMenuId() == MENU_SRV_COUNTRY ||
+#endif
             UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME)
         {
             switch (gAskForConfirmation)

@@ -147,6 +147,7 @@ set(SURVIVAL_SRC ${CMAKE_CURRENT_SOURCE_DIR}/../../firmware)
 enable_feature(ENABLE_SURVIVAL
     ${SURVIVAL_SRC}/app/survival.c
     ${SURVIVAL_SRC}/app/survival_manual.c
+    ${SURVIVAL_SRC}/app/survival_country.c
     ${SURVIVAL_SRC}/ui/survival.c
 )
 if(ENABLE_SURVIVAL)

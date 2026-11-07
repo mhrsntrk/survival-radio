@@ -87,6 +87,15 @@ void    SURVIVAL_MaskScanDigits(char *freq);
 const char *SURVIVAL_VfoLabel(uint8_t channel);   // "AIR BAND" or "CUSTOM" for the VFO modes
 void    SURVIVAL_VfoRange(uint8_t channel, uint32_t *lower, uint32_t *upper);   // scan range of a VFO mode
 
+#ifdef SURVIVAL_TARGET_V3
+// country presets (V3 build): LOCAL group, CB plan, emergency numbers
+extern uint8_t gSurvivalCountry;
+void        SURVIVAL_SetCountry(uint8_t country);   // rewrites the groups, keeps FAV
+uint8_t     SURVIVAL_CountryCount(void);
+const char *SURVIVAL_CountryName(uint8_t country);
+const char *SURVIVAL_CountryRows(void);             // numbers page rows, '\0' separated, "" ends
+#endif
+
 // FM radio with a background scan of one group on the BK4819
 void    SURVIVAL_FmStarted(void);
 void    SURVIVAL_FmStopped(void);

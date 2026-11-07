@@ -20,6 +20,8 @@
 #include "driver/backlight.h"
 #include "driver/eeprom.h"
 #ifdef SURVIVAL_TARGET_V3
+    #include "app/survival_country.h"
+    #include "ui/menu.h"
     #include "driver/py25q16.h"
 #endif
 #include "external/printf/printf.h"
@@ -62,7 +64,11 @@ static void SurvWrite(uint16_t addr, const void *buf)
 #define SURV_RANGE_START   14400000   // 144.000 MHz
 #define SURV_RANGE_END     14600000   // 146.000 MHz
 // bump when the channel tables or defaults change, radios re-init on next boot
+#ifdef SURVIVAL_TARGET_V3
+#define SURV_TABLE_VERSION 8   // V3: country presets, FAV from channel 170
+#else
 #define SURV_TABLE_VERSION 7
+#endif
 // bump for setting changes that existing radios get without a re-init (byte 7)
 #define SURV_SETTINGS_REV  3
 #define SURV_TX_DEFAULT    (1u << SURV_TX_PMR)   // Spain/EU: FRS is not licence-free here
@@ -119,7 +125,11 @@ static void RemoveSkip(uint8_t index)
 }
 
 const char gSubMenu_SRV_MODE[SURV_MODE_COUNT][9] = {
+#ifdef SURVIVAL_TARGET_V3
+    "PMR446", "LOCAL", "MARINE", "AIR", "HAM", "CB", "FM RADIO", "CUSTOM", "FAV",
+#else
     "PMR446", "FRS", "MARINE", "AIR", "HAM", "CB", "FM RADIO", "CUSTOM", "FAV",
+#endif
 };
 
 #define SURV_AM     (1u << 0)
@@ -224,13 +234,73 @@ static_assert(ARRAY_SIZE(GROUPS) == SURV_MODE_FM, "");
 
 #define GROUP_NONE 0xFF
 
+#ifdef SURVIVAL_TARGET_V3
+// ---------------------------------------------------------------- country presets
+// The country sets the LOCAL group (in place of FRS) and the CB plan. FAV starts at a
+// fixed channel, so a country change rewrites the groups below it and keeps FAV.
+#define SURV_FAV_FIRST   170
+#define SURV_COUNTRY_OFS 16                      // in the survival flash sector
+#define SURV_FAV_STAGE   0x013000   // own sector (unused by F4HWN V3): FAV parked during a country change
+
+uint8_t gSurvivalCountry = SURV_COUNTRY_GENERIC;
+static bool sAskCountry;     // first boot: the country menu opens after the logo
+
+static const SurvivalCountry_t *Country(void)
+{
+    return &gSurvivalCountries[gSurvivalCountry];
+}
+
+static uint8_t GroupCount(uint8_t g)
+{
+    if (g == SURV_MODE_FRS)
+        return Country()->localCount;
+    if (g == SURV_MODE_CB)
+        return (Country()->cb == SURV_CB_DE80 || Country()->cb == SURV_CB_UK) ? 80 : 40;
+    return GROUPS[g].count;
+}
+
+static void SaveCountry(void)
+{
+    uint8_t rec[8];
+    memset(rec, 0xFF, sizeof(rec));
+    rec[0] = gSurvivalCountry;
+    PY25Q16_WriteBuffer(SURV_FLASH_ADDR + SURV_COUNTRY_OFS, rec, sizeof(rec), false);
+}
+
+static void LoadCountry(void)
+{
+    uint8_t c;
+    PY25Q16_ReadBuffer(SURV_FLASH_ADDR + SURV_COUNTRY_OFS, &c, 1);
+    sAskCountry      = c >= gSurvivalCountryCount;   // never chosen: ask after the logo
+    gSurvivalCountry = sAskCountry ? SURV_COUNTRY_GENERIC : c;
+}
+
+const char *SURVIVAL_CountryName(uint8_t c)
+{
+    return (c < gSurvivalCountryCount) ? gSurvivalCountries[c].name : "";
+}
+
+uint8_t SURVIVAL_CountryCount(void)
+{
+    return gSurvivalCountryCount;
+}
+
+// emergency numbers and local channels of the selected country, manual style rows
+const char *SURVIVAL_CountryRows(void)
+{
+    return Country()->numbers;
+}
+#else
+#define GroupCount(g) (GROUPS[g].count)
+#endif
+
 static void ShowMessage(const char *line1, const char *line2);   // feedback screen, see below
 
 static uint8_t GroupStart(uint8_t g)
 {
     uint8_t start = 0;
     for (uint8_t i = 0; i < g; i++)
-        start += GROUPS[i].count;
+        start += GroupCount(i);
     return start;
 }
 
@@ -238,7 +308,7 @@ static uint8_t FindGroup(uint8_t channel)
 {
     uint8_t start = 0;
     for (uint8_t g = 0; g < ARRAY_SIZE(GROUPS); g++) {
-        start += GROUPS[g].count;
+        start += GroupCount(g);
         if (channel < start)
             return g;
     }
@@ -248,7 +318,11 @@ static uint8_t FindGroup(uint8_t channel)
 // own channels (FAV) follow the fixed groups
 static uint8_t FavFirst(void)
 {
+#ifdef SURVIVAL_TARGET_V3
+    return SURV_FAV_FIRST;
+#else
     return GroupStart(ARRAY_SIZE(GROUPS));
+#endif
 }
 
 static uint8_t FirstFav(void)
@@ -275,7 +349,7 @@ bool SURVIVAL_GetGroupRange(uint8_t channel, uint8_t *first, uint8_t *last)
         return true;
     }
     *first = GroupStart(g);
-    *last  = *first + GROUPS[g].count - 1;
+    *last  = *first + GroupCount(g) - 1;
     return true;
 }
 
@@ -316,7 +390,24 @@ static void ChannelName(const SurvivalGroup_t *grp, uint8_t i, char *name)
         sprintf(name, "%s%u", grp->prefix, num);
 }
 
-static void WriteChannels(void)
+#ifdef SURVIVAL_TARGET_V3
+// copy the FAV channels and their names (flash 0x000000 + 16 * ch, 0x00e000 + 16 * ch)
+// to the staging area and back, 16 bytes at a time
+static void MoveFav(bool park)
+{
+    uint8_t buf[16];
+    for (uint8_t c = SURV_FAV_FIRST; IS_MR_CHANNEL(c); c++) {
+        for (uint8_t k = 0; k < 2; k++) {
+            const uint32_t live  = (k ? 0x00e000 : 0x000000) + c * 16u;
+            const uint32_t stage = SURV_FAV_STAGE + ((c - SURV_FAV_FIRST) * 2u + k) * 16u;
+            PY25Q16_ReadBuffer(park ? live : stage, buf, sizeof(buf));
+            PY25Q16_WriteBuffer(park ? stage : live, buf, sizeof(buf), false);
+        }
+    }
+}
+#endif
+
+static void WriteChannels(bool keepFav)
 {
     VFO_Info_t *pVfo = &gEeprom.VfoInfo[0];   // reloaded by RADIO_ConfigureChannel afterwards
     uint8_t     ch   = 0;
@@ -326,34 +417,81 @@ static void WriteChannels(void)
     // Every channel and name is rewritten below. Blank the two flash sectors that
     // hold only them (EEPROM 0x0000-0x0C7F and 0x0F50-0x1BCF), so each write
     // programs erased flash instead of erasing a 4 KB sector per channel.
+    // A country change parks FAV first and puts it back afterwards.
+    if (keepFav) {
+        PY25Q16_SectorErase(SURV_FAV_STAGE);
+        MoveFav(true);
+    }
     PY25Q16_SectorErase(0x000000);
     PY25Q16_SectorErase(0x00e000);
+#else
+    (void)keepFav;
 #endif
 
     for (uint8_t g = 0; g < ARRAY_SIZE(GROUPS); g++) {
         const SurvivalGroup_t *grp = &GROUPS[g];
 
-        for (uint8_t i = 0; i < grp->count; i++, ch++) {
-            const uint32_t freq = grp->freqs ? grp->freqs[i] : grp->base + (uint32_t)i * grp->step;
+        for (uint8_t i = 0; i < GroupCount(g); i++, ch++) {
+#ifdef SURVIVAL_TARGET_V3
+            if (g == SURV_MODE_FRS) {   // LOCAL: the country's channels
+                const SurvivalLocal_t *loc = &Country()->local[i];
+                RADIO_InitInfo(pVfo, ch, loc->freq);
+                pVfo->Modulation        = (loc->flags & SURV_LOCAL_AM)   ? MODULATION_AM  : MODULATION_FM;
+                pVfo->CHANNEL_BANDWIDTH = (loc->flags & SURV_LOCAL_WIDE) ? BANDWIDTH_WIDE : BANDWIDTH_NARROW;
+                pVfo->OUTPUT_POWER      = OUTPUT_POWER_LOW4;
+                if (loc->tone) {   // sent so the listeners' tone squelch opens; RX stays open
+                    pVfo->freq_config_TX.CodeType = CODE_TYPE_CONTINUOUS_TONE;
+                    pVfo->freq_config_TX.Code     = loc->tone - 1;
+                }
+                SETTINGS_SaveChannel(ch, 0, pVfo, 2);
+                strcpy(name, loc->name);
+                SETTINGS_SaveChannelName(ch, name);
+                continue;
+            }
+#endif
+            uint32_t freq = grp->freqs ? grp->freqs[i] : grp->base + (uint32_t)i * grp->step;
+            uint8_t  flags = grp->flags;
+#ifdef SURVIVAL_TARGET_V3
+            if (g == SURV_MODE_CB) {
+                const uint8_t plan = Country()->cb;
+                if (i >= 40)   // Germany 41-80 below CEPT, UK 27/81 above
+                    freq = (plan == SURV_CB_DE80 ? 2656500 : 2760125) + (uint32_t)(i - 40) * 1000;
+                else if (plan == SURV_CB_PL) {
+                    freq -= 500;   // Polish channels sit 5 kHz lower, mostly AM
+                    flags |= SURV_AM;
+                }
+            }
+#endif
 
             RADIO_InitInfo(pVfo, ch, freq);
-            pVfo->Modulation        = (grp->flags & SURV_AM)     ? MODULATION_AM     : MODULATION_FM;
-            pVfo->CHANNEL_BANDWIDTH = (grp->flags & SURV_NARROW) ? BANDWIDTH_NARROW  : BANDWIDTH_WIDE;
-            pVfo->OUTPUT_POWER      = (grp->flags & SURV_HIGH)   ? OUTPUT_POWER_HIGH : OUTPUT_POWER_LOW4;
+            pVfo->Modulation        = (flags & SURV_AM)     ? MODULATION_AM     : MODULATION_FM;
+            pVfo->CHANNEL_BANDWIDTH = (flags & SURV_NARROW) ? BANDWIDTH_NARROW  : BANDWIDTH_WIDE;
+            pVfo->OUTPUT_POWER      = (flags & SURV_HIGH)   ? OUTPUT_POWER_HIGH : OUTPUT_POWER_LOW4;
             if (grp->freqs == MARINE_FREQS && grp->nums[i] < 200 && freq >= 16000000) {
                 pVfo->TX_OFFSET_FREQUENCY           = MARINE_DUPLEX_OFFSET;
                 pVfo->TX_OFFSET_FREQUENCY_DIRECTION = TX_OFFSET_FREQUENCY_DIRECTION_SUB;
             }
             SETTINGS_SaveChannel(ch, 0, pVfo, 2);
 
+#ifdef SURVIVAL_TARGET_V3
+            if (g == SURV_MODE_CB && i >= 40)
+                sprintf(name, Country()->cb == SURV_CB_UK ? "UK %u" : "CB %u", Country()->cb == SURV_CB_UK ? i - 39 : i + 1);
+            else
+#endif
             ChannelName(grp, i, name);
             SETTINGS_SaveChannelName(ch, name);
         }
     }
 
     // FAV starts empty: clear whatever the stock firmware left there
-    for (; IS_MR_CHANNEL(ch); ch++)
+    // (on V3 also the unused channels between the groups and FAV)
+    for (; IS_MR_CHANNEL(ch) && !(keepFav && ch >= FavFirst()); ch++)
         SETTINGS_UpdateChannel(ch, pVfo, false, false, true);
+
+#ifdef SURVIVAL_TARGET_V3
+    if (keepFav)
+        MoveFav(false);
+#endif
 }
 
 // FM broadcast 87.5-108 MHz (an erased EEPROM reads as band 3 = 64-76 MHz)
@@ -427,6 +565,9 @@ void SURVIVAL_Init(void)
 {
     uint8_t marker[8];
 
+#ifdef SURVIVAL_TARGET_V3
+    LoadCountry();   // before anything looks at the group layout
+#endif
     SurvRead(SURV_MARKER_ADDR, marker, sizeof(marker));
     // the priority channel is marked with the (otherwise unused) scan list 1 bit
     for (uint8_t c = 0; IS_MR_CHANNEL(c); c++) {
@@ -462,7 +603,7 @@ void SURVIVAL_Init(void)
         return;
     }
 
-    WriteChannels();
+    WriteChannels(false);
     WriteDefaults();
     sSkipCount = 0;   // new channel tables: an empty skip list
     memset(sSkip, 0, sizeof(sSkip));
@@ -538,6 +679,10 @@ static bool SelectModeChannel(uint8_t mode, uint8_t vfo)
         gEeprom.ScreenChannel[vfo] = AIR_VFO_CHANNEL;
         return true;
     }
+#ifdef SURVIVAL_TARGET_V3
+    if (mode < ARRAY_SIZE(GROUPS) && GroupCount(mode) == 0)
+        return false;   // e.g. no LOCAL channels in this country
+#endif
     const uint8_t ch = (mode == SURV_MODE_FAV) ? FirstFav() : GroupStart(mode);
     if (ch == 0xFF)
         return false;
@@ -607,6 +752,11 @@ void SURVIVAL_SetMode(uint8_t mode)
     } else if (!SelectModeChannel(mode, vfo)) {
         gBeepToPlay = BEEP_500HZ_60MS_DOUBLE_BEEP_OPTIONAL;   // FAV empty: on to the first group
         SelectModeChannel(SURV_MODE_PMR, vfo);
+#ifdef SURVIVAL_TARGET_V3
+        if (mode != SURV_MODE_FAV)
+            ShowMessage("NO CHANNELS", "IN THIS COUNTRY");
+        else
+#endif
         ShowMessage("FAV EMPTY", "F+7 ADDS");
         gVfoConfigureMode = VFO_CONFIGURE_RELOAD;
         gRequestSaveVFO   = true;
@@ -631,7 +781,12 @@ void SURVIVAL_ToggleFm(void)
 
 void ACTION_SurvivalGroup(void)
 {
-    SURVIVAL_SetMode((SURVIVAL_GetMode() + 1) % SURV_MODE_COUNT);
+    uint8_t mode = (SURVIVAL_GetMode() + 1) % SURV_MODE_COUNT;
+#ifdef SURVIVAL_TARGET_V3
+    while (mode < ARRAY_SIZE(GROUPS) && GroupCount(mode) == 0)   // skip empty groups
+        mode++;
+#endif
+    SURVIVAL_SetMode(mode);
 }
 
 void SURVIVAL_FmStarted(void)
@@ -949,6 +1104,10 @@ static const char *NextString(const char *p)
     return p + strlen(p) + 1;
 }
 
+#ifdef SURVIVAL_TARGET_V3
+static char sNumbersTitle[13];   // "ES NUMBERS": the last topic, rows from the country
+#endif
+
 // title of topic n, NULL past the last one
 static const char *ManualTopic(uint8_t n)
 {
@@ -961,6 +1120,12 @@ static const char *ManualTopic(uint8_t n)
         while (*p);
         p++;   // the empty string after the rows
     }
+#ifdef SURVIVAL_TARGET_V3
+    if (n == 0) {
+        sprintf(sNumbersTitle, "%s NUMBERS", Country()->code);
+        return sNumbersTitle;
+    }
+#endif
     return NULL;
 }
 
@@ -983,12 +1148,69 @@ static uint8_t RowCount(const char *row)
 // rows of topic n (after its title); the help pages show some topics too
 const char *SURVIVAL_ManualRows(uint8_t n)
 {
-    return NextString(ManualTopic(n));
+    const char *title = ManualTopic(n);
+#ifdef SURVIVAL_TARGET_V3
+    if (title == sNumbersTitle)
+        return Country()->numbers;
+#endif
+    return NextString(title);
 }
+
+#ifdef SURVIVAL_TARGET_V3
+// Menu > Country: rewrite the groups for the new country, FAV stays
+void SURVIVAL_SetCountry(uint8_t c)
+{
+    if (c >= gSurvivalCountryCount)
+        return;
+    sAskCountry = false;
+
+    if (gScanStateDir != SCAN_OFF)
+        CHFRSCANNER_Stop();
+
+    gSurvivalCountry = c;
+    SaveCountry();
+    WriteChannels(true);
+    if (gSurvivalPrio < FavFirst())
+        gSurvivalPrio = 0xFF;   // the group channels were rewritten without the mark
+
+    // both VFOs back on a valid channel: the group they were on may have moved
+    for (uint8_t vfo = 0; vfo < 2; vfo++) {
+        if (IS_MR_CHANNEL(gEeprom.ScreenChannel[vfo]) && gEeprom.ScreenChannel[vfo] < FavFirst()) {
+            gEeprom.MrChannel[vfo]     = 0;
+            gEeprom.ScreenChannel[vfo] = 0;
+        }
+        RADIO_ConfigureChannel(vfo, VFO_CONFIGURE_RELOAD);
+    }
+    SETTINGS_SaveVfoIndices();
+    RADIO_SelectVfos();
+    RADIO_SetupRegisters(true);
+    ShowMessage(Country()->name, "PRESETS LOADED");
+}
+
+// first boot: the country menu, in edit mode (M confirms, EXIT keeps EUROPE)
+static bool AskCountry(void)
+{
+    if (!sAskCountry)
+        return false;
+    sAskCountry         = false;
+    gMenuLevel          = 0;
+    gMenuCursor         = UI_MENU_GetMenuIdx(MENU_SRV_COUNTRY);
+    gSubMenuSelection   = gSurvivalCountry;
+    gIsInSubMenu        = true;
+    gAskForConfirmation = 0;
+    GUI_SelectNextDisplay(DISPLAY_MENU);
+    gRequestDisplayScreen = DISPLAY_INVALID;
+    return true;
+}
+#endif
 
 // after the boot logo: 5 s "PRESS M FOR MANUAL", M opens it, any other key skips
 void SURVIVAL_ShowBootPrompt(void)
 {
+#ifdef SURVIVAL_TARGET_V3
+    if (AskCountry())
+        return;
+#endif
     SURVIVAL_ShowLog();
     sManual   = MAN_PROMPT;
     sManTimer = 10;

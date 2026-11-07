@@ -52,6 +52,7 @@ const t_menu_item MenuList[] =
 //   text,          menu ID              title
     // Basic
     {"Group",       MENU_SRV_GROUP,      "USE GROUP"  },
+    {"Region",      MENU_SRV_COUNTRY,    "COUNTRY"    },
     {"Heard",       MENU_SRV_HEARD,      "LAST HEARD" },
     {"Skip",        MENU_SRV_SKIP,       "SKIP LIST"  },
     {"Favs",        MENU_SRV_FAV,        "FAVORITE"   },
@@ -77,7 +78,6 @@ const t_menu_item MenuList[] =
     {"Start",       MENU_SRV_C_START,    "SCAN START" },
     {"End",         MENU_SRV_C_END,      "SCAN END"   },
     {"TxPMR",       MENU_SRV_TX_PMR,     "PMR SEND"   },
-    {"TxFRS",       MENU_SRV_TX_FRS,     "FRS SEND"   },
     {"TxMAR",       MENU_SRV_TX_MARINE,  "MARINE SEND"},
     {"TxHAM",       MENU_SRV_TX_HAM,     "HAM SEND"   },
     {"TxCB",        MENU_SRV_TX_CB,      "CB SEND"    },
@@ -731,6 +731,10 @@ void UI_DisplayMenu(void)
 
         case MENU_SRV_ECO:
             strcpy(String, gSubMenu_OFF_ON[gSubMenuSelection]);
+            break;
+
+        case MENU_SRV_COUNTRY:
+            strcpy(String, SURVIVAL_CountryName(gSubMenuSelection));
             break;
 
         case MENU_SRV_HEARD:
@@ -1563,6 +1567,9 @@ void UI_DisplayMenu(void)
     if ((UI_MENU_GetCurrentMenuId() == MENU_RESET    ||
          UI_MENU_GetCurrentMenuId() == MENU_MEM_CH   ||
          UI_MENU_GetCurrentMenuId() == MENU_MEM_NAME ||
+#ifdef ENABLE_SURVIVAL
+         UI_MENU_GetCurrentMenuId() == MENU_SRV_COUNTRY ||
+#endif
          UI_MENU_GetCurrentMenuId() == MENU_DEL_CH) && gAskForConfirmation)
     {   // display confirmation
         char *pPrintStr = (gAskForConfirmation == 1) ? "SURE?" : "WAIT!";

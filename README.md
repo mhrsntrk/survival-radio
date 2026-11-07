@@ -119,6 +119,14 @@ Same steps with the V3 file and the V3 flasher. The bootloader (DFU) mode is ent
   python3 tools/k5v3flash.py --port /dev/ttyUSB0 builds/bmks.survival.v3.bin --yes
   ```
 
+**Country presets (V3 only).** On the first start the V3 build asks for the country
+(*Menu > Region*, `UP/DOWN` to choose, `M` twice to confirm, `EXIT` keeps *EUROPE*); it can be changed later
+in the same menu. The country fills the **LOCAL** group (in place of FRS, which is not licence-free in
+Europe: e.g. PMR 7-7 with tone 85.4 Hz in Spain, PMR 8-16 with 114.8 Hz in Italy, Freenet in Germany and
+UK marine 0/M1/M2, the last two receive only), sets the CB plan (CEPT 40, German 80, UK 27/81, Polish -5 kHz
+AM) and adds its emergency numbers as the last manual topic. FAV channels (from channel 170) are kept;
+transmit permission still comes from the band switches in *Menu > Adv*.
+
 UVTools2 can also dump the calibration (*Dump Calib*); do that once the firmware runs. On the V3
 the settings live in SPI flash, and the survival record (first-boot marker, CUSTOM range) has its own
 sector at 0x00D000.
