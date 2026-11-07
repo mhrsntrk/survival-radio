@@ -42,6 +42,11 @@ enum {
 
 extern const char gSubMenu_SRV_MODE[SURV_MODE_COUNT][9];
 extern uint8_t    gSurvivalTxMask;
+extern uint8_t    gSurvivalFlags;
+#define SURV_F_NO_LIMITS (1u << 0)   // emergency override: no power cap, CB may send
+#define SURV_F_SIMPLE    (1u << 1)   // simple mode: few groups, PTT behind key lock
+#define SURV_F_CUSTOM    (1u << 2)   // CUSTOM shares the air band VFO slot (range in 108-137 MHz)
+#define SURV_F_PTT_FREE  (1u << 3)   // key lock leaves PTT usable
 extern uint8_t    gSurvivalFmScan;        // FM background scan: 0 off, 1..6 = group (SURV_MODE_* + 1), 7 = last mode
 #define SURV_FMSCAN_LAST (SURV_MODE_FM + 1)
 extern uint32_t   gSurvivalCustomStart;   // CUSTOM mode scan range, 10 Hz units

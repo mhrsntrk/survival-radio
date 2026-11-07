@@ -8,6 +8,7 @@
 #ifdef ENABLE_SURVIVAL
 
 #include <assert.h>
+#include <stddef.h>
 #include <string.h>
 
 #include "app/action.h"
@@ -35,37 +36,43 @@
 #include "ui/inputbox.h"
 #include "ui/ui.h"
 
-// EEPROM 0x1FF8: 'S' 'U' 'R' 'V', table version, TX mask, FM background scan, settings revision
-#define SURV_MARKER_ADDR   0x1FF8
-// EEPROM 0x1FE8: CUSTOM scan range, start and end as uint32 (10 Hz units)
-#define SURV_RANGE_ADDR    0x1FE8
-// UV-K1 / UV-K5 V3 keep the settings in SPI flash behind an EEPROM map with holes:
-// 0x1FE8 is not mapped (writes are dropped), and 0x1FF8 shares a sector with F4HWN
-// settings written in append mode, which erases the rest of the sector. The two
-// records get their own sector, 0x00D000, outside the EEPROM map.
-#define SURV_FLASH_ADDR    0x00D000
-
-static void SurvRead(uint16_t addr, void *buf, uint8_t size)
-{
-    PY25Q16_ReadBuffer(SURV_FLASH_ADDR + (addr == SURV_RANGE_ADDR ? 8 : 0), buf, size);
-}
-
-static void SurvWrite(uint16_t addr, const void *buf)
-{
-    PY25Q16_WriteBuffer(SURV_FLASH_ADDR + (addr == SURV_RANGE_ADDR ? 8 : 0), buf, 8, false);
-}
 #define SURV_RANGE_START   14400000   // 144.000 MHz
 #define SURV_RANGE_END     14600000   // 146.000 MHz
-// bump when the channel tables or defaults change, radios re-init on next boot
-#define SURV_TABLE_VERSION 8   // V3: country presets, FAV from channel 170
-// bump for setting changes that existing radios get without a re-init (byte 7)
-#define SURV_SETTINGS_REV  3
-#define SURV_TX_DEFAULT    (1u << SURV_TX_PMR)   // Spain/EU: FRS is not licence-free here
+// bump when the channel tables change: the groups are rewritten on the next boot,
+// FAV, the skip list and all settings are kept
+#define SURV_TABLE_VERSION 1
+#define SURV_TX_DEFAULT    (1u << SURV_TX_PMR)   // FRS is not licence-free in Europe
+
+// ---------------------------------------------------------------- settings record
+// All survival settings and the skip list in one CRC checked record, written to two
+// flash sectors in turn (outside the EEPROM map, unused by F4HWN): a power cut while
+// one is erased or written leaves the other, older record intact.
+#define SURV_REC_A   0x00D000
+#define SURV_REC_B   0x012000
+
+typedef struct {
+    uint8_t  magic[4];      // 'S' 'U' 'R' 'V'
+    uint16_t seq;           // the higher (wrapping) sequence number is the current record
+    uint8_t  tableVer;
+    uint8_t  txMask;
+    uint8_t  fmScan;
+    uint8_t  country;       // 0xFF: never chosen, asked after the logo
+    uint8_t  flags;         // SURV_F_*
+    uint8_t  listen;        // listen windows, see SURVIVAL_ListenWindow
+    uint32_t customStart;   // 10 Hz units
+    uint32_t customEnd;
+    uint32_t skip[SURV_SKIP_N];
+    uint8_t  reserved[6];
+    uint16_t crc;
+} SurvRecord_t;
 
 static const uint8_t SURV_MAGIC[4] = {'S', 'U', 'R', 'V'};
+static SurvRecord_t  sRec;
+static bool          sRecInB;   // the current record is in sector B
 
 uint8_t  gSurvivalTxMask      = SURV_TX_DEFAULT;
 uint8_t  gSurvivalFmScan      = SURV_FMSCAN_LAST;
+uint8_t  gSurvivalFlags       = 0;
 
 static bool sFmBgScan;       // BK4819 scans a group while the FM radio plays
 static bool sStopOnRxEnd;    // a background hit ends the scan when that transmission ends
@@ -74,28 +81,68 @@ uint32_t gSurvivalCustomStart = SURV_RANGE_START;
 uint32_t gSurvivalCustomEnd   = SURV_RANGE_END;
 uint8_t  gSurvivalPrio        = 0xFF;
 
-// ---------------------------------------------------------------- skip list
-// Frequencies the scans pass over (noise, carriers), kept at the start of the list.
-// EEPROM 0x1C00: the DTMF contact area, unused here (DTMF calling is off)
-#define SURV_SKIP_ADDR 0x1C00
+static uint16_t Crc16(const void *data, uint16_t size)
+{
+    const uint8_t *p   = data;
+    uint16_t       crc = 0xFFFF;
+    while (size--) {
+        crc ^= (uint16_t)*p++ << 8;
+        for (uint8_t i = 0; i < 8; i++)
+            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+    }
+    return crc;
+}
 
-static uint32_t sSkip[SURV_SKIP_N];   // 10 Hz units
-static uint8_t  sSkipCount;
+static bool ReadRecord(uint32_t addr, SurvRecord_t *rec)
+{
+    PY25Q16_ReadBuffer(addr, rec, sizeof(*rec));
+    return memcmp(rec->magic, SURV_MAGIC, sizeof(SURV_MAGIC)) == 0 &&
+           rec->crc == Crc16(rec, offsetof(SurvRecord_t, crc));
+}
+
+// the newer valid record of the two sectors into sRec, false when there is none
+static bool LoadRecord(void)
+{
+    SurvRecord_t b;
+    const bool okA = ReadRecord(SURV_REC_A, &sRec);
+    const bool okB = ReadRecord(SURV_REC_B, &b);
+    sRecInB = okB && (!okA || (int16_t)(b.seq - sRec.seq) > 0);
+    if (sRecInB)
+        sRec = b;
+    return okA || okB;
+}
+
+static void SaveRecord(void)
+{
+    const uint32_t addr = sRecInB ? SURV_REC_A : SURV_REC_B;
+    memcpy(sRec.magic, SURV_MAGIC, sizeof(SURV_MAGIC));
+    sRec.seq++;
+    sRec.txMask      = gSurvivalTxMask;
+    sRec.fmScan      = gSurvivalFmScan;
+    sRec.flags       = gSurvivalFlags;
+    sRec.customStart = gSurvivalCustomStart;
+    sRec.customEnd   = gSurvivalCustomEnd;
+    sRec.crc         = Crc16(&sRec, offsetof(SurvRecord_t, crc));
+    PY25Q16_SectorErase(addr);
+    PY25Q16_WriteBuffer(addr, &sRec, sizeof(sRec), false);
+    sRecInB = !sRecInB;
+}
+
+// ---------------------------------------------------------------- skip list
+// Frequencies the scans pass over (noise, carriers), kept at the start of the list,
+// stored in the settings record
+#define sSkip sRec.skip   // 10 Hz units
+static uint8_t sSkipCount;
 
 static void LoadSkip(void)
 {
-    EEPROM_ReadBuffer(SURV_SKIP_ADDR, sSkip, sizeof(sSkip));
     sSkipCount = 0;
     while (sSkipCount < SURV_SKIP_N && sSkip[sSkipCount] != 0 && sSkip[sSkipCount] != 0xFFFFFFFF)
         sSkipCount++;
     memset(&sSkip[sSkipCount], 0, (SURV_SKIP_N - sSkipCount) * sizeof(sSkip[0]));
 }
 
-static void SaveSkip(void)
-{
-    for (uint8_t i = 0; i < SURV_SKIP_N; i += 2)
-        EEPROM_WriteBuffer(SURV_SKIP_ADDR + i * 4, &sSkip[i]);
-}
+#define SaveSkip SaveRecord
 
 bool SURVIVAL_IsSkipped(uint32_t frequency)
 {
@@ -190,6 +237,20 @@ static const uint32_t MARINE_FREQS[] = {
 #define AIR_SCAN_END    13697500
 #define AIR_START_FREQ  12150000   // 121.500 guard
 
+// the air band slot is AIR, unless CUSTOM was put there (its range is in 108-137 MHz)
+static bool IsAirSlot(uint8_t channel)
+{
+    return channel == AIR_VFO_CHANNEL && !(gSurvivalFlags & SURV_F_CUSTOM);
+}
+
+static void SetCustomFlag(bool on)
+{
+    if (!(gSurvivalFlags & SURV_F_CUSTOM) == !on)
+        return;
+    gSurvivalFlags ^= SURV_F_CUSTOM;
+    SURVIVAL_SaveSettings();
+}
+
 // FM calling channels for ITU region 1 (Europe/Africa/Middle East) and 2 (Americas)
 static const uint32_t HAM_FREQS[] = {
     14550000, 14652000, 43350000, 44600000, 14580000,
@@ -223,7 +284,6 @@ static_assert(ARRAY_SIZE(GROUPS) == SURV_MODE_FM, "");
 // The country sets the LOCAL group (in place of FRS) and the CB plan. FAV starts at a
 // fixed channel, so a country change rewrites the groups below it and keeps FAV.
 #define SURV_FAV_FIRST   170
-#define SURV_COUNTRY_OFS 16                      // in the survival flash sector
 #define SURV_FAV_STAGE   0x013000   // own sector (unused by F4HWN V3): FAV parked during a country change
 
 uint8_t gSurvivalCountry = SURV_COUNTRY_GENERIC;
@@ -243,18 +303,9 @@ static uint8_t GroupCount(uint8_t g)
     return GROUPS[g].count;
 }
 
-static void SaveCountry(void)
-{
-    uint8_t rec[8];
-    memset(rec, 0xFF, sizeof(rec));
-    rec[0] = gSurvivalCountry;
-    PY25Q16_WriteBuffer(SURV_FLASH_ADDR + SURV_COUNTRY_OFS, rec, sizeof(rec), false);
-}
-
 static void LoadCountry(void)
 {
-    uint8_t c;
-    PY25Q16_ReadBuffer(SURV_FLASH_ADDR + SURV_COUNTRY_OFS, &c, 1);
+    const uint8_t c  = sRec.country;
     sAskCountry      = c >= gSurvivalCountryCount;   // never chosen: ask after the logo
     gSurvivalCountry = sAskCountry ? SURV_COUNTRY_GENERIC : c;
 }
@@ -398,6 +449,7 @@ static void WriteChannels(bool keepFav)
     }
     PY25Q16_SectorErase(0x000000);
     PY25Q16_SectorErase(0x00e000);
+    gSettingsBatchAttr = true;   // the attribute table is written once at the end
 
     for (uint8_t g = 0; g < ARRAY_SIZE(GROUPS); g++) {
         const SurvivalGroup_t *grp = &GROUPS[g];
@@ -453,6 +505,15 @@ static void WriteChannels(bool keepFav)
     for (; IS_MR_CHANNEL(ch) && !(keepFav && ch >= FavFirst()); ch++)
         SETTINGS_UpdateChannel(ch, pVfo, false, false, true);
 
+    {   // attribute table (flash 0x002000, one byte per channel) in one write
+        uint8_t buf[224];
+        PY25Q16_ReadBuffer(0x002000, buf, sizeof(buf));
+        for (uint8_t c = 0; IS_MR_CHANNEL(c); c++)
+            buf[c] = gMR_ChannelAttributes[c].__val;
+        PY25Q16_WriteBuffer(0x002000, buf, sizeof(buf), true);
+        gSettingsBatchAttr = false;
+    }
+
     if (keepFav)
         MoveFav(false);
 }
@@ -505,31 +566,39 @@ static void WriteDefaults(void)
 
 void SURVIVAL_SaveSettings(void)
 {
-    const uint8_t marker[8] = {
-        SURV_MAGIC[0], SURV_MAGIC[1], SURV_MAGIC[2], SURV_MAGIC[3],
-        SURV_TABLE_VERSION, gSurvivalTxMask, gSurvivalFmScan, SURV_SETTINGS_REV,
-    };
-    SurvWrite(SURV_MARKER_ADDR, marker);
+    SaveRecord();
 }
 
+// CUSTOM range: inside the receiver bands, start below end, at least 100 kHz wide
 void SURVIVAL_SaveCustomRange(void)
 {
-    if (gSurvivalCustomStart > gSurvivalCustomEnd) {
-        const uint32_t tmp   = gSurvivalCustomStart;
-        gSurvivalCustomStart = gSurvivalCustomEnd;
-        gSurvivalCustomEnd   = tmp;
+    uint32_t lo = gSurvivalCustomStart, hi = gSurvivalCustomEnd;
+    if (lo > hi) {
+        const uint32_t tmp = lo;
+        lo = hi;
+        hi = tmp;
     }
-
-    const uint32_t range[2] = {gSurvivalCustomStart, gSurvivalCustomEnd};
-    SurvWrite(SURV_RANGE_ADDR, range);
+    if (lo < BX4819_band1.lower)
+        lo = BX4819_band1.lower;
+    if (hi > BX4819_band2.upper)
+        hi = BX4819_band2.upper;
+    if (lo > BX4819_band1.upper && lo < BX4819_band2.lower)   // the chip's gap
+        lo = BX4819_band2.lower;
+    if (hi > BX4819_band1.upper && hi < BX4819_band2.lower)
+        hi = BX4819_band1.upper;
+    if (hi < lo + 10000) {
+        lo = SURV_RANGE_START;
+        hi = SURV_RANGE_END;
+    }
+    gSurvivalCustomStart = lo;
+    gSurvivalCustomEnd   = hi;
+    SaveRecord();
 }
 
 void SURVIVAL_Init(void)
 {
-    uint8_t marker[8];
+    const bool known = LoadRecord();
 
-    LoadCountry();   // before anything looks at the group layout
-    SurvRead(SURV_MARKER_ADDR, marker, sizeof(marker));
     // the priority channel is marked with the (otherwise unused) scan list 1 bit
     for (uint8_t c = 0; IS_MR_CHANNEL(c); c++) {
         if (gMR_ChannelAttributes[c].scanlist1 && RADIO_CheckValidChannel(c, false, 0)) {
@@ -538,41 +607,42 @@ void SURVIVAL_Init(void)
         }
     }
 
-    if (memcmp(marker, SURV_MAGIC, sizeof(SURV_MAGIC)) == 0 && marker[4] == SURV_TABLE_VERSION) {
-        uint32_t range[2];
+    if (known) {
+        LoadCountry();   // before anything looks at the group layout
         LoadSkip();
-        SurvRead(SURV_RANGE_ADDR, range, sizeof(range));
-        gSurvivalTxMask = marker[5];
-        if (marker[6] <= SURV_FMSCAN_LAST)
-            gSurvivalFmScan = marker[6];
-        if (marker[7] != SURV_SETTINGS_REV) {
-            // rev 1: side key 2 short press toggles the FM radio
-            gEeprom.KEY_2_SHORT_PRESS_ACTION = ACTION_OPT_FM;
-            // rev 3: side key 1 tap = flashlight modes, hold = monitor
-            gEeprom.KEY_1_SHORT_PRESS_ACTION = ACTION_OPT_FLASHLIGHT;
-            gEeprom.KEY_1_LONG_PRESS_ACTION  = ACTION_OPT_MONITOR;
-            SETTINGS_SaveSettings();
-            // rev 2: FM band back to 87.5-108 MHz after a reset left band 3
-            if (gEeprom.FM_Band == 3)
-                FmDefaults();
-            SURVIVAL_SaveSettings();
-        }
-        if (range[0] >= BX4819_band1.lower && range[0] < range[1] && range[1] <= BX4819_band2.upper) {
-            gSurvivalCustomStart = range[0];
-            gSurvivalCustomEnd   = range[1];
+        gSurvivalTxMask = sRec.txMask;
+        gSurvivalFlags  = sRec.flags;
+        if (sRec.fmScan <= SURV_FMSCAN_LAST)
+            gSurvivalFmScan = sRec.fmScan;
+        gSurvivalCustomStart = sRec.customStart;
+        gSurvivalCustomEnd   = sRec.customEnd;
+        if (sRec.tableVer != SURV_TABLE_VERSION) {   // new channel tables: groups only
+            WriteChannels(true);
+            if (gSurvivalPrio < FavFirst())
+                gSurvivalPrio = 0xFF;
+            sRec.tableVer = SURV_TABLE_VERSION;
+            SaveRecord();
         }
         return;
     }
 
+    // first start (or after a reset): everything from scratch
+    memset(&sRec, 0xFF, sizeof(sRec));
+    sRec.seq      = 0;
+    sRec.tableVer = SURV_TABLE_VERSION;
+    sRec.listen   = 0;
+    LoadCountry();
     WriteChannels(false);
     WriteDefaults();
-    sSkipCount = 0;   // new channel tables: an empty skip list
+    sSkipCount = 0;
     memset(sSkip, 0, sizeof(sSkip));
-    SaveSkip();
-    gSurvivalPrio   = 0xFF;   // the channels were rewritten without a priority mark
-    gSurvivalTxMask = SURV_TX_DEFAULT;
-    SURVIVAL_SaveSettings();
-    SURVIVAL_SaveCustomRange();
+    gSurvivalPrio        = 0xFF;   // the channels were rewritten without a priority mark
+    gSurvivalTxMask      = SURV_TX_DEFAULT;
+    gSurvivalFlags       = 0;
+    gSurvivalCustomStart = SURV_RANGE_START;
+    gSurvivalCustomEnd   = SURV_RANGE_END;
+    memset(sRec.reserved, 0xFF, sizeof(sRec.reserved));
+    SaveRecord();
 }
 
 void SURVIVAL_ApplyScanRange(void)
@@ -581,7 +651,7 @@ void SURVIVAL_ApplyScanRange(void)
 
     // VFO modes scan a range with the VFO step: AIR the air band, CUSTOM the user range
     const uint8_t channel = gRxVfo->CHANNEL_SAVE;
-    if (channel == AIR_VFO_CHANNEL) {
+    if (IsAirSlot(channel)) {
         gScanRangeStart = AIR_SCAN_START;
         gScanRangeStop  = AIR_SCAN_END;
     } else if (!IS_MR_CHANNEL(channel)) {
@@ -609,11 +679,11 @@ bool SURVIVAL_TxAllowed(uint32_t frequency)
     return false;
 }
 
+// factory reset: both records go, the next start sets everything up again
 void SURVIVAL_EraseMarker(void)
 {
-    uint8_t blank[8];
-    memset(blank, 0xFF, sizeof(blank));
-    SurvWrite(SURV_MARKER_ADDR, blank);
+    PY25Q16_SectorErase(SURV_REC_A);
+    PY25Q16_SectorErase(SURV_REC_B);
 }
 
 uint8_t SURVIVAL_GetMode(void)
@@ -623,7 +693,7 @@ uint8_t SURVIVAL_GetMode(void)
         return SURV_MODE_FM;
 #endif
     const uint8_t channel = gEeprom.ScreenChannel[gEeprom.TX_VFO];
-    if (channel == AIR_VFO_CHANNEL)
+    if (IsAirSlot(channel))
         return SURV_MODE_AIR;
     if (!IS_MR_CHANNEL(channel))
         return SURV_MODE_CUSTOM;
@@ -637,6 +707,7 @@ uint8_t SURVIVAL_GetMode(void)
 static bool SelectModeChannel(uint8_t mode, uint8_t vfo)
 {
     if (mode == SURV_MODE_AIR) {
+        SetCustomFlag(false);
         gEeprom.ScreenChannel[vfo] = AIR_VFO_CHANNEL;
         return true;
     }
@@ -665,12 +736,12 @@ void SURVIVAL_MaskScanDigits(char *freq)
 
 const char *SURVIVAL_VfoLabel(uint8_t channel)
 {
-    return (channel == AIR_VFO_CHANNEL) ? "AIR BAND" : "CUSTOM";
+    return IsAirSlot(channel) ? "AIR BAND" : "CUSTOM";
 }
 
 void SURVIVAL_VfoRange(uint8_t channel, uint32_t *lower, uint32_t *upper)
 {
-    const bool air = channel == AIR_VFO_CHANNEL;
+    const bool air = IsAirSlot(channel);
     *lower = air ? AIR_SCAN_START : gSurvivalCustomStart;
     *upper = air ? AIR_SCAN_END   : gSurvivalCustomEnd;
 }
@@ -699,6 +770,7 @@ void SURVIVAL_SetMode(uint8_t mode)
         // free frequency on the band VFO of the range start; a frequency outside the
         // range (an unused band slot can hold anything, e.g. 1300 MHz) starts at its beginning
         const uint8_t slot = FREQ_CHANNEL_FIRST + FREQUENCY_GetBand(gSurvivalCustomStart);
+        SetCustomFlag(slot == AIR_VFO_CHANNEL);
         gEeprom.FreqChannel[vfo]   = slot;
         gEeprom.ScreenChannel[vfo] = slot;
         RADIO_ConfigureChannel(vfo, VFO_CONFIGURE_RELOAD);
@@ -1116,7 +1188,8 @@ void SURVIVAL_SetCountry(uint8_t c)
         CHFRSCANNER_Stop();
 
     gSurvivalCountry = c;
-    SaveCountry();
+    sRec.country     = c;
+    SaveRecord();
     WriteChannels(true);
     if (gSurvivalPrio < FavFirst())
         gSurvivalPrio = 0xFF;   // the group channels were rewritten without the mark

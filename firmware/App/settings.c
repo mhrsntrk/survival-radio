@@ -43,6 +43,9 @@ static const uint32_t gDefaultFrequencyTable[] =
 #endif
 
 EEPROM_Config_t gEeprom = { 0 };
+#ifdef ENABLE_SURVIVAL
+bool gSettingsBatchAttr;   // channel attributes stay in RAM, the caller writes the table once
+#endif
 
 void SETTINGS_InitEEPROM(void)
 {
@@ -1039,6 +1042,10 @@ void SETTINGS_UpdateChannel(uint8_t channel, const VFO_Info_t *pVFO, bool keep, 
 
 #ifndef ENABLE_FEAT_F4HWN
         save = true;
+#endif
+#ifdef ENABLE_SURVIVAL
+        if (gSettingsBatchAttr)
+            save = false;
 #endif
         if(save)
         {

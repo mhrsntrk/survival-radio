@@ -56,6 +56,7 @@ static uint16_t sNoiseFloor;    // RSSI (0.5 dB units) of empty steps, 0 = not k
 static uint8_t  sDisplaySteps;
 static uint8_t  sPrioSteps;     // steps since the last look at the priority channel
 static bool     sPrioPeek;      // the radio is on the priority channel right now
+static bool     sPrioBack;      // a peek ended: retune even if the next channel is the same
 
 #define PRIO_EVERY_STEPS 20
 
@@ -189,6 +190,7 @@ void CHFRSCANNER_ContinueScanning(void)
         if (sPrioPeek) {
             // nothing on the priority channel: NextMemChannel goes on from gNextMrChannel
             sPrioPeek = false;
+            sPrioBack = true;
             sPrecheck = false;
         } else {
             if (sPrecheck) {
@@ -486,8 +488,16 @@ static void NextMemChannel(void)
         //LogUart(str);
     }
 
+#ifdef ENABLE_SURVIVAL
+    // after a priority peek the receiver is still on the priority channel
+    if (gNextMrChannel != prev_chan || sPrioBack)
+#else
     if (gNextMrChannel != prev_chan)
+#endif
     {
+#ifdef ENABLE_SURVIVAL
+        sPrioBack = false;
+#endif
         gEeprom.MrChannel[    gEeprom.RX_VFO] = gNextMrChannel;
         gEeprom.ScreenChannel[gEeprom.RX_VFO] = gNextMrChannel;
 

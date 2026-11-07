@@ -308,6 +308,9 @@ typedef struct {
 } EEPROM_Config_t;
 
 extern EEPROM_Config_t gEeprom;
+#ifdef ENABLE_SURVIVAL
+extern bool gSettingsBatchAttr;
+#endif
 
 void     SETTINGS_InitEEPROM(void);
 void     SETTINGS_LoadCalibration(void);
