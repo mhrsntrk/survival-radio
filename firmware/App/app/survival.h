@@ -154,7 +154,7 @@ const char *SURVIVAL_TeamTalker(void);
 uint16_t    SURVIVAL_ClockMin(void);          // 0xFFFF: not set
 void        SURVIVAL_SetClockMin(uint16_t min);
 void        SURVIVAL_ShowTeam(void);          // F+3
-void        SURVIVAL_Message(const char *line1, const char *line2);   // 1.5 s feedback screen
+void        SURVIVAL_Message(const char *line1, const char *line2);   // alert screen, up to 30 s
 bool        SURVIVAL_Reserve(void);           // battery reserve mode is on
 
 // FM radio with a background scan of one group on the BK4819

@@ -1194,9 +1194,15 @@ static uint8_t sManTimer;      // half seconds left on the boot prompt
 
 
 // short feedback for keys that otherwise only beep, back to main after 1.5 s
+// alerts from outside a key press (team messages, lost contact, battery reserve):
+// the screen is switched at once (a display request waits for the next key) and the
+// alert stays up to 30 s, any key closes it
 void SURVIVAL_Message(const char *line1, const char *line2)
 {
     ShowMessage(line1, line2);
+    sMsgTimer             = 60;
+    gRequestDisplayScreen = DISPLAY_INVALID;
+    GUI_SelectNextDisplay(DISPLAY_SCANNER);
 }
 
 static void ShowMessage(const char *line1, const char *line2)
